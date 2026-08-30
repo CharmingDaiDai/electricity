@@ -49,4 +49,27 @@ class BillingCoreTest {
         assertEquals(2, result.entries.size)
         assertEquals(15.67, result.entries[1].kwh, 0.0)
     }
+
+    @Test
+    fun manualPriceOverridesOneCycleOnly() {
+        val settings = AppSettings(
+            cycleStartDate = LocalDate.parse("2026-08-01"),
+            initialPrice = 0.8,
+            actualPrice = 1.2,
+        )
+        val entries = listOf(
+            UsageEntry(LocalDate.parse("2026-08-01"), 10.0),
+            UsageEntry(LocalDate.parse("2026-08-16"), 10.0),
+        )
+
+        val summaries = buildCycleSummaries(
+            entries = entries,
+            settings = settings,
+            today = LocalDate.parse("2026-08-16"),
+            manualPrices = mapOf(1 to 1.2),
+        )
+
+        assertEquals(0.8, summaries[0].expectedPrice, 0.0)
+        assertEquals(1.2, summaries[1].expectedPrice, 0.0)
+    }
 }
