@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,7 +36,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.isSystemInDarkTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -191,7 +191,7 @@ private fun CurrentCycleCard(current: CycleSummary, totalDifference: Double) {
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
             )
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("当前电价 ${fmt(current.expectedPrice)} 元/度")
                 Text("下周期预计 ${fmt(nextCycleEstimatedPrice(current.totalKwh))} 元/度")
