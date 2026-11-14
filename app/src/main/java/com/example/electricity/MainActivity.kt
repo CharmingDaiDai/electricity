@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -267,7 +268,14 @@ private fun ElectricityApp() {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.9f),
+                        ),
+                    ),
+                )
                 .padding(padding),
         ) {
             AnimatedContent(
@@ -508,12 +516,13 @@ private fun BottomDock(screen: Screen, onScreen: (Screen) -> Unit, modifier: Mod
     )
     Surface(
         modifier = modifier
+            .widthIn(max = 360.dp)
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp),
         shape = RoundedCornerShape(25.dp),
-        color = if (dark) Color(0xFF242A30).copy(alpha = 0.82f) else Color(0xFFFDFEFF).copy(alpha = 0.78f),
-        shadowElevation = 16.dp,
+        color = if (dark) Color(0xFF202831).copy(alpha = 0.9f) else Color(0xFFFDFEFF).copy(alpha = 0.86f),
+        shadowElevation = 20.dp,
         border = BorderStroke(1.dp, rim),
     ) {
         BoxWithConstraints(Modifier.fillMaxWidth().padding(4.dp)) {
@@ -866,12 +875,43 @@ private fun HeroCard(
         animationSpec = tween(420),
         label = "usage-threshold-progress",
     )
+    val dark = isSystemInDarkTheme()
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
-        color = Color(0xFF171A1F),
-        shadowElevation = 10.dp,
+        color = Color.Transparent,
+        border = BorderStroke(
+            1.dp,
+            Brush.linearGradient(listOf(Color.White.copy(alpha = 0.6f), Color.White.copy(alpha = 0.08f), MaterialTheme.colorScheme.secondary.copy(alpha = 0.42f))),
+        ),
+        shadowElevation = 18.dp,
     ) {
+        Box {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(
+                        Brush.linearGradient(
+                            if (dark) listOf(Color(0xFF34414C), Color(0xFF20272E), Color(0xFF111417))
+                            else listOf(Color(0xFF26333A), Color(0xFF1B2329), Color(0xFF121619)),
+                        ),
+                    ),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .width(120.dp)
+                    .height(190.dp)
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.045f), Color.Transparent))),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.68f), Color.Transparent))),
+            )
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f).padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -921,6 +961,7 @@ private fun HeroCard(
                     }
                 }
             }
+        }
         }
     }
 }
@@ -1120,38 +1161,45 @@ private fun SettingsScreen(
 
 @Composable
 private fun ModeSelector(mode: RecordMode, onMode: (RecordMode) -> Unit) {
+    val dark = isSystemInDarkTheme()
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f)),
+        color = if (dark) Color(0xFF222A31).copy(alpha = 0.88f) else Color.White.copy(alpha = 0.84f),
+        border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = 0.72f), MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.36f)))),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            ModeButton("日", mode == RecordMode.Day, Modifier.weight(1f)) { onMode(RecordMode.Day) }
-            ModeButton("周", mode == RecordMode.Week, Modifier.weight(1f)) { onMode(RecordMode.Week) }
-            ModeButton("月", mode == RecordMode.Month, Modifier.weight(1f)) { onMode(RecordMode.Month) }
-            ModeButton("年", mode == RecordMode.Year, Modifier.weight(1f)) { onMode(RecordMode.Year) }
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(5.dp)) {
+            val itemWidth = maxWidth / 4
+            val indicatorOffset by animateDpAsState(
+                targetValue = itemWidth * mode.ordinal.toFloat(),
+                animationSpec = spring(dampingRatio = 0.9f, stiffness = 520f),
+                label = "range-glass-indicator",
+            )
+            Surface(
+                modifier = Modifier.offset(x = indicatorOffset).width(itemWidth).height(40.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = if (dark) Color(0xFF718A9B).copy(alpha = 0.28f) else Color.White.copy(alpha = 0.92f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = if (dark) 0.46f else 0.96f)),
+                shadowElevation = 3.dp,
+            ) {}
+            Row(Modifier.fillMaxWidth()) {
+                ModeButton("日", mode == RecordMode.Day, Modifier.weight(1f)) { onMode(RecordMode.Day) }
+                ModeButton("周", mode == RecordMode.Week, Modifier.weight(1f)) { onMode(RecordMode.Week) }
+                ModeButton("月", mode == RecordMode.Month, Modifier.weight(1f)) { onMode(RecordMode.Month) }
+                ModeButton("年", mode == RecordMode.Year, Modifier.weight(1f)) { onMode(RecordMode.Year) }
+            }
         }
     }
 }
 
 @Composable
 private fun ModeButton(text: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val backgroundColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-        animationSpec = tween(160),
-        label = "record-range-tab",
-    )
-    Surface(
-        modifier = modifier.pressScale(onClick),
-        shape = RoundedCornerShape(13.dp),
-        color = backgroundColor,
-    ) {
+    Box(modifier = modifier.height(40.dp).clip(RoundedCornerShape(14.dp)).pressScale(onClick), contentAlignment = Alignment.Center) {
         Text(
             text = text,
             modifier = Modifier.padding(vertical = 10.dp),
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
     }
@@ -1602,7 +1650,9 @@ private fun DatePickerField(label: String, value: String, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().pressScale(onClick),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.68f),
+        color = if (isSystemInDarkTheme()) Color(0xFF252D34).copy(alpha = 0.92f) else Color.White.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = 0.72f), MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)))),
+        shadowElevation = 5.dp,
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
@@ -1633,7 +1683,9 @@ private fun RentDayPicker(rentDay: Int, onChange: (Int) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().pressScale { showPicker = true },
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.68f),
+        color = if (isSystemInDarkTheme()) Color(0xFF252D34).copy(alpha = 0.92f) else Color.White.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = 0.72f), MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f)))),
+        shadowElevation = 5.dp,
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
