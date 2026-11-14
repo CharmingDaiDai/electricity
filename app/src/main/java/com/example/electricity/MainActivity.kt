@@ -12,6 +12,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -322,7 +323,7 @@ private fun ElectricityApp() {
 
 @Composable
 private fun NavItem(selected: Boolean, onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
-    NavigationBarItem(
+    androidx.compose.material3.NavigationBarItem(
         selected = selected,
         onClick = onClick,
         icon = { Icon(icon, contentDescription = null) },
@@ -680,8 +681,8 @@ private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, on
     val gridStart = first.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     ModernCard {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("一", "二", "三", "四", "五", "六", "日").forEach {
-                Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            listOf<String>("一", "二", "三", "四", "五", "六", "日").forEach { dayName: String ->
+                Text(dayName, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         (0..5).forEach { week ->
@@ -892,7 +893,7 @@ private fun ThresholdCard(totalKwh: Double) {
 }
 
 @Composable
-private fun ModernCard(content: @Composable Column.() -> Unit) {
+private fun ModernCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
