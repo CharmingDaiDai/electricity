@@ -1,10 +1,11 @@
 package com.example.electricity
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -17,12 +18,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
@@ -58,31 +66,44 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.YearMonth
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
+import kotlin.math.abs
 
-private enum class Screen {
-    Home,
-    Records,
-    Settings,
-}
+private enum class Screen { Home, Records, Settings }
+private enum class RecordMode { Day, Week, Month, Year }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        preferHighestRefreshRate()
         setContent {
             ElectricityTheme {
                 ElectricityApp()
             }
         }
+    }
+
+    private fun preferHighestRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val mode = windowManager.defaultDisplay.supportedModes.maxByOrNull { it.refreshRate } ?: return
+        val attributes = window.attributes
+        attributes.preferredDisplayModeId = mode.modeId
+        window.attributes = attributes
     }
 }
 
@@ -90,19 +111,27 @@ class MainActivity : ComponentActivity() {
 private fun ElectricityTheme(content: @Composable () -> Unit) {
     val colors = if (isSystemInDarkTheme()) {
         darkColorScheme(
-            primary = Color(0xFF5EEAD4),
-            primaryContainer = Color(0xFF134E4A),
-            secondaryContainer = Color(0xFF334155),
-            surface = Color(0xFF111827),
-            background = Color(0xFF0B1120),
+            primary = Color(0xFF7DD3FC),
+            onPrimary = Color(0xFF082F49),
+            primaryContainer = Color(0xFF0F3A4A),
+            onPrimaryContainer = Color(0xFFE0F2FE),
+            secondary = Color(0xFF5EEAD4),
+            secondaryContainer = Color(0xFF123A3A),
+            surface = Color(0xFF111318),
+            surfaceVariant = Color(0xFF242832),
+            background = Color(0xFF080A0F),
         )
     } else {
         lightColorScheme(
-            primary = Color(0xFF0F766E),
-            primaryContainer = Color(0xFFCCFBF1),
-            secondaryContainer = Color(0xFFE2E8F0),
-            surface = Color(0xFFFFFBF7),
-            background = Color(0xFFF8FAFC),
+            primary = Color(0xFF075985),
+            onPrimary = Color.White,
+            primaryContainer = Color(0xFFE0F2FE),
+            onPrimaryContainer = Color(0xFF0C4A6E),
+            secondary = Color(0xFF0F766E),
+            secondaryContainer = Color(0xFFCCFBF1),
+            surface = Color(0xFFFFFCF7),
+            surfaceVariant = Color(0xFFEFF4F8),
+            background = Color(0xFFF6F8FB),
         )
     }
     MaterialTheme(colorScheme = colors, content = content)
@@ -114,10 +143,15 @@ private fun ElectricityApp() {
     val context = LocalContext.current
     val entries = remember { mutableStateListOf<UsageEntry>() }
     var settings by remember { mutableStateOf(loadSettings(context)) }
+    val currentIndex = cycleIndexOf(settings.cycleStartDate, LocalDate.now())
     var manualPrices by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
+    var settlements by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
+    var settlementFocus by remember { mutableStateOf<Int?>(currentIndex) }
     var screen by remember { mutableStateOf(Screen.Home) }
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var editingEntry by remember { mutableStateOf<UsageEntry?>(null) }
     var overridingCycle by remember { mutableStateOf<CycleSummary?>(null) }
+    var settlingCycle by remember { mutableStateOf<CycleSummary?>(null) }
     var showEntryDialog by remember { mutableStateOf(false) }
     var showBatchDialog by remember { mutableStateOf(false) }
 
@@ -125,24 +159,25 @@ private fun ElectricityApp() {
         entries.clear()
         entries.addAll(loadEntries(context))
         manualPrices = loadManualPrices(context)
+        settlements = loadSettlements(context)
     }
 
     val summaries = buildCycleSummaries(entries, settings, manualPrices = manualPrices)
-    val currentIndex = cycleIndexOf(settings.cycleStartDate, LocalDate.now())
     val current = summaries.lastOrNull { it.index == currentIndex } ?: summaries.last()
     val totalDifference = money(summaries.sumOf { it.difference })
+    val totalSettled = money(settlements.values.sum())
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = when (screen) {
-                            Screen.Home -> "电费概览"
-                            Screen.Records -> "用电记录"
+                        when (screen) {
+                            Screen.Home -> "电费"
+                            Screen.Records -> "日历"
                             Screen.Settings -> "设置"
                         },
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                     )
                 },
                 actions = {
@@ -154,31 +189,16 @@ private fun ElectricityApp() {
         },
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(
-                    selected = screen == Screen.Home,
-                    onClick = { screen = Screen.Home },
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                    label = { Text("概览") },
-                )
-                NavigationBarItem(
-                    selected = screen == Screen.Records,
-                    onClick = { screen = Screen.Records },
-                    icon = { Icon(Icons.Default.List, contentDescription = null) },
-                    label = { Text("记录") },
-                )
-                NavigationBarItem(
-                    selected = screen == Screen.Settings,
-                    onClick = { screen = Screen.Settings },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text("设置") },
-                )
+                NavItem(screen == Screen.Home, { screen = Screen.Home }, Icons.Default.Home, "概览")
+                NavItem(screen == Screen.Records, { screen = Screen.Records }, Icons.Default.List, "日历")
+                NavItem(screen == Screen.Settings, { screen = Screen.Settings }, Icons.Default.Settings, "设置")
             }
         },
         floatingActionButton = {
             if (screen != Screen.Settings) {
                 ExtendedFloatingActionButton(
                     onClick = {
-                        editingEntry = null
+                        editingEntry = entries.firstOrNull { it.date == selectedDate }
                         showEntryDialog = true
                     },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -188,7 +208,7 @@ private fun ElectricityApp() {
         },
     ) { padding ->
         Box(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .padding(padding),
@@ -197,13 +217,21 @@ private fun ElectricityApp() {
                 Screen.Home -> HomeScreen(
                     current = current,
                     summaries = summaries,
-                    totalDifference = totalDifference,
                     manualPrices = manualPrices,
+                    settlements = settlements,
+                    settlementFocus = settlementFocus,
+                    totalDifference = totalDifference,
+                    totalSettled = totalSettled,
+                    onSettlementFocus = { settlementFocus = it },
                     onOverridePrice = { overridingCycle = it },
+                    onSettle = { settlingCycle = it },
                 )
                 Screen.Records -> RecordsScreen(
-                    entries = entries.sortedByDescending { it.date.toEpochDay() },
+                    entries = entries,
+                    selectedDate = selectedDate,
+                    onSelectedDate = { selectedDate = it },
                     onEdit = {
+                        selectedDate = it.date
                         editingEntry = it
                         showEntryDialog = true
                     },
@@ -211,21 +239,23 @@ private fun ElectricityApp() {
                         entries.removeAll { entry -> entry.date == it.date }
                         saveEntries(context, entries)
                     },
-                )
-                Screen.Settings -> SettingsScreen(
-                    settings = settings,
-                    entries = entries,
-                    onSave = {
-                        settings = it
-                        saveSettings(context, it)
+                    onAddForDate = {
+                        selectedDate = it
+                        editingEntry = entries.firstOrNull { entry -> entry.date == it }
+                        showEntryDialog = true
                     },
                 )
+                Screen.Settings -> SettingsScreen(settings, entries) {
+                    settings = it
+                    saveSettings(context, it)
+                }
             }
         }
     }
 
     if (showEntryDialog) {
         EntryDialog(
+            date = selectedDate,
             entry = editingEntry,
             onDismiss = { showEntryDialog = false },
             onSave = { entry ->
@@ -263,40 +293,98 @@ private fun ElectricityApp() {
                 saveManualPrices(context, manualPrices)
                 overridingCycle = null
             },
-            onSave = { price ->
-                manualPrices = manualPrices + (summary.index to price)
+            onSave = {
+                manualPrices = manualPrices + (summary.index to it)
                 saveManualPrices(context, manualPrices)
                 overridingCycle = null
+            },
+        )
+    }
+
+    settlingCycle?.let { summary ->
+        SettlementDialog(
+            summary = summary,
+            currentValue = settlements[summary.index],
+            onDismiss = { settlingCycle = null },
+            onClear = {
+                settlements = settlements - summary.index
+                saveSettlements(context, settlements)
+                settlingCycle = null
+            },
+            onSave = {
+                settlements = settlements + (summary.index to it)
+                saveSettlements(context, settlements)
+                settlingCycle = null
             },
         )
     }
 }
 
 @Composable
+private fun NavItem(selected: Boolean, onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+    NavigationBarItem(
+        selected = selected,
+        onClick = onClick,
+        icon = { Icon(icon, contentDescription = null) },
+        label = { Text(label) },
+    )
+}
+
+@Composable
 private fun HomeScreen(
     current: CycleSummary,
     summaries: List<CycleSummary>,
-    totalDifference: Double,
     manualPrices: Map<Int, Double>,
+    settlements: Map<Int, Double>,
+    settlementFocus: Int?,
+    totalDifference: Double,
+    totalSettled: Double,
+    onSettlementFocus: (Int?) -> Unit,
     onOverridePrice: (CycleSummary) -> Unit,
+    onSettle: (CycleSummary) -> Unit,
 ) {
+    val focused = settlementFocus?.let { index -> summaries.firstOrNull { it.index == index } }
+    val displaySummary = focused ?: current
+    val displayDifference = focused?.difference ?: totalDifference
+    val displaySettled = focused?.let { settlements[it.index] ?: 0.0 } ?: totalSettled
+    val displayPeriod = if (focused == null) {
+        "${summaries.firstOrNull()?.startDate ?: current.startDate} - ${summaries.lastOrNull()?.endDate ?: current.endDate}"
+    } else {
+        "${displaySummary.startDate} - ${displaySummary.endDate}"
+    }
     LazyColumn(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Spacer(Modifier.height(4.dp)) }
-        item { CurrentCycleCard(current, totalDifference) }
-        item { ThresholdCard(current.totalKwh) }
+        item { Spacer(Modifier.height(2.dp)) }
         item {
-            SectionTitle("历史周期")
+            SettlementScopePicker(
+                summaries = summaries,
+                selectedIndex = settlementFocus,
+                onSelected = onSettlementFocus,
+            )
         }
+        item {
+            HeroCard(
+                summary = displaySummary,
+                scopeLabel = if (focused == null) "全部周期" else "选中周期",
+                periodLabel = displayPeriod,
+                totalKwh = if (focused == null) summaries.sumOf { it.totalKwh } else displaySummary.totalKwh,
+                totalDifference = displayDifference,
+                totalSettled = displaySettled,
+            )
+        }
+        item { ThresholdCard(current.totalKwh) }
+        item { SectionTitle("周期账单") }
         items(summaries.reversed(), key = { it.index }) { summary ->
             CycleCard(
                 summary = summary,
                 isOverridden = manualPrices.containsKey(summary.index),
+                settled = settlements[summary.index],
                 onOverridePrice = onOverridePrice,
+                onSettle = onSettle,
             )
         }
         item { Spacer(Modifier.height(96.dp)) }
@@ -304,34 +392,144 @@ private fun HomeScreen(
 }
 
 @Composable
+private fun SettlementScopePicker(
+    summaries: List<CycleSummary>,
+    selectedIndex: Int?,
+    onSelected: (Int?) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("结算查看", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ScopeChip("全部", selectedIndex == null) { onSelected(null) }
+            summaries.reversed().forEach { summary ->
+                ScopeChip(
+                    label = "${summary.startDate.monthValue}/${summary.startDate.dayOfMonth}",
+                    selected = selectedIndex == summary.index,
+                ) { onSelected(summary.index) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScopeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (selected) 0.dp else 1.dp,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun HeroCard(
+    summary: CycleSummary,
+    scopeLabel: String,
+    periodLabel: String,
+    totalKwh: Double,
+    totalDifference: Double,
+    totalSettled: Double,
+) {
+    val remaining = money(totalDifference - totalSettled)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+    ) {
+        Box(
+            Modifier
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.secondary,
+                        )
+                    )
+                )
+                .padding(20.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(scopeLabel, color = Color.White.copy(alpha = 0.82f), fontWeight = FontWeight.Medium)
+                    Text(periodLabel, color = Color.White.copy(alpha = 0.88f))
+                }
+                Text("${fmt(totalKwh)} 度", color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+                LinearProgressIndicator(
+                    progress = (summary.totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.24f),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GlassMetric("执行电价", "${fmt(summary.expectedPrice)} 元/度", Modifier.weight(1f))
+                    GlassMetric("实际扣费", "${fmt(summary.actualPrice)} 元/度", Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    GlassMetric(if (totalDifference >= 0) "应退合计" else "应补合计", "${fmt(abs(totalDifference))} 元", Modifier.weight(1f))
+                    GlassMetric(if (remaining >= 0) "未处理" else "多处理", "${fmt(abs(remaining))} 元", Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun RecordsScreen(
     entries: List<UsageEntry>,
+    selectedDate: LocalDate,
+    onSelectedDate: (LocalDate) -> Unit,
     onEdit: (UsageEntry) -> Unit,
     onDelete: (UsageEntry) -> Unit,
+    onAddForDate: (LocalDate) -> Unit,
 ) {
+    var mode by remember { mutableStateOf(RecordMode.Month) }
+    var anchor by remember(selectedDate) { mutableStateOf(selectedDate) }
+    val byDate = entries.associateBy { it.date }
+
     LazyColumn(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Spacer(Modifier.height(4.dp)) }
+        item { Spacer(Modifier.height(2.dp)) }
         item {
-            SummaryStrip(
-                leftTitle = "已记录",
-                leftValue = "${entries.size} 天",
-                rightTitle = "总用电",
-                rightValue = "${fmt(entries.sumOf { it.kwh })} 度",
+            ModeSelector(mode) { mode = it }
+        }
+        item {
+            CalendarHeader(
+                title = calendarTitle(mode, anchor),
+                onPrev = { anchor = moveAnchor(anchor, mode, -1) },
+                onNext = { anchor = moveAnchor(anchor, mode, 1) },
             )
         }
-        if (entries.isEmpty()) {
-            item {
-                EmptyState("还没有记录。点右下角“录入”添加第一天用电量。")
+        item {
+            when (mode) {
+                RecordMode.Day -> DayPanel(anchor, byDate[anchor], onAddForDate, onEdit, onDelete)
+                RecordMode.Week -> WeekPanel(anchor, byDate, onSelectedDate, onAddForDate)
+                RecordMode.Month -> MonthPanel(anchor, byDate, onSelectedDate, onAddForDate)
+                RecordMode.Year -> YearPanel(anchor, entries) { month ->
+                    anchor = month.atDay(1)
+                    mode = RecordMode.Month
+                }
             }
-        } else {
-            items(entries, key = { it.date.toString() }) { entry ->
-                EntryRow(entry, onEdit, onDelete)
-            }
+        }
+        item {
+            val visible = visibleEntries(mode, anchor, entries)
+            RecordsSummary(visible)
+        }
+        items(visibleEntries(mode, anchor, entries).sortedByDescending { it.date.toEpochDay() }, key = { it.date.toString() }) {
+            EntryRow(it, onEdit, onDelete)
         }
         item { Spacer(Modifier.height(96.dp)) }
     }
@@ -343,87 +541,57 @@ private fun SettingsScreen(settings: AppSettings, entries: List<UsageEntry>, onS
     var startDate by remember(settings) { mutableStateOf(settings.cycleStartDate.toString()) }
     var initialPrice by remember(settings) { mutableStateOf(fmt(settings.initialPrice)) }
     var actualPrice by remember(settings) { mutableStateOf(fmt(settings.actualPrice)) }
-    var message by remember { mutableStateOf("修改后点保存，历史周期会立即重新计算。") }
+    var message by remember { mutableStateOf("设置会立即影响所有周期计算。") }
 
     LazyColumn(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Spacer(Modifier.height(4.dp)) }
+        item { Spacer(Modifier.height(2.dp)) }
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("计费规则", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-                    OutlinedTextField(
-                        value = startDate,
-                        onValueChange = { startDate = it },
-                        label = { Text("周期开始日期") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = initialPrice,
-                        onValueChange = { initialPrice = it },
-                        label = { Text("首个周期电价") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = actualPrice,
-                        onValueChange = { actualPrice = it },
-                        label = { Text("公寓实际扣费单价") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Button(
-                        onClick = {
-                            val date = runCatching { LocalDate.parse(startDate) }.getOrNull()
-                            val initial = initialPrice.toDoubleOrNull()
-                            val actual = actualPrice.toDoubleOrNull()
-                            if (date == null || initial == null || actual == null) {
-                                message = "请检查日期和价格格式。"
-                            } else {
-                                onSave(AppSettings(date, twoDecimals(initial), twoDecimals(actual)))
-                                message = "已保存。"
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("保存设置")
-                    }
-                    Text(message, style = MaterialTheme.typography.bodySmall)
-                }
+            ModernCard {
+                Text("计费规则", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                SettingField(startDate, { startDate = it }, "周期开始日期", KeyboardType.Text)
+                SettingField(initialPrice, { initialPrice = it }, "首个周期电价")
+                SettingField(actualPrice, { actualPrice = it }, "公寓实际扣费单价")
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val date = runCatching { LocalDate.parse(startDate) }.getOrNull()
+                        val initial = initialPrice.toDoubleOrNull()
+                        val actual = actualPrice.toDoubleOrNull()
+                        if (date == null || initial == null || actual == null) {
+                            message = "请检查日期和价格格式。"
+                        } else {
+                            onSave(AppSettings(date, twoDecimals(initial), twoDecimals(actual)))
+                            message = "已保存。"
+                        }
+                    },
+                ) { Text("保存设置") }
+                Text(message, style = MaterialTheme.typography.bodySmall)
             }
         }
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("阶梯说明", fontWeight = FontWeight.SemiBold)
-                    Text("上一周期 0-60 度：下一周期 0.80 元/度")
-                    Text("上一周期 60.01-120 度：下一周期 1.00 元/度")
-                    Text("上一周期超过 120 度：下一周期 1.20 元/度")
-                }
+            ModernCard {
+                Text("阶梯规则", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                RuleLine("0-60 度", "下周期 0.80 元/度")
+                RuleLine("60.01-120 度", "下周期 1.00 元/度")
+                RuleLine("超过 120 度", "下周期 1.20 元/度")
             }
         }
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("数据导出", fontWeight = FontWeight.SemiBold)
-                    Text("把每日记录复制为 CSV，可直接粘贴到 Excel。")
-                    OutlinedButton(
-                        onClick = {
-                            clipboard.setText(AnnotatedString(entriesToCsv(entries)))
-                            message = "CSV 已复制。"
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("复制 CSV")
-                    }
-                }
+            ModernCard {
+                Text("数据", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text("每日记录可复制为 CSV，粘贴到 Excel 或备忘录。")
+                OutlinedButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(entriesToCsv(entries)))
+                        message = "CSV 已复制。"
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("复制 CSV") }
             }
         }
         item { Spacer(Modifier.height(96.dp)) }
@@ -431,45 +599,274 @@ private fun SettingsScreen(settings: AppSettings, entries: List<UsageEntry>, onS
 }
 
 @Composable
-private fun CurrentCycleCard(current: CycleSummary, totalDifference: Double) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+private fun ModeSelector(mode: RecordMode, onMode: (RecordMode) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("当前周期", style = MaterialTheme.typography.labelLarge)
-                Text("${current.startDate} 至 ${current.endDate}", style = MaterialTheme.typography.bodyMedium)
+        Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            ModeButton("日", mode == RecordMode.Day, Modifier.weight(1f)) { onMode(RecordMode.Day) }
+            ModeButton("周", mode == RecordMode.Week, Modifier.weight(1f)) { onMode(RecordMode.Week) }
+            ModeButton("月", mode == RecordMode.Month, Modifier.weight(1f)) { onMode(RecordMode.Month) }
+            ModeButton("年", mode == RecordMode.Year, Modifier.weight(1f)) { onMode(RecordMode.Year) }
+        }
+    }
+}
+
+@Composable
+private fun ModeButton(text: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(vertical = 10.dp),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun CalendarHeader(title: String, onPrev: () -> Unit, onNext: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+        IconButton(onClick = onPrev) { Icon(Icons.Default.ChevronLeft, contentDescription = "上一个") }
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, contentDescription = "下一个") }
+    }
+}
+
+@Composable
+private fun DayPanel(date: LocalDate, entry: UsageEntry?, onAdd: (LocalDate) -> Unit, onEdit: (UsageEntry) -> Unit, onDelete: (UsageEntry) -> Unit) {
+    ModernCard {
+        Text(date.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp)
+        if (entry == null) {
+            Text("这一天还没有记录。")
+            Button(onClick = { onAdd(date) }, modifier = Modifier.fillMaxWidth()) { Text("录入这一天") }
+        } else {
+            Text("${fmt(entry.kwh)} 度", fontWeight = FontWeight.Bold, fontSize = 34.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = { onEdit(entry) }, modifier = Modifier.weight(1f)) { Text("编辑") }
+                OutlinedButton(onClick = { onDelete(entry) }, modifier = Modifier.weight(1f)) { Text("删除") }
             }
+        }
+    }
+}
+
+@Composable
+private fun WeekPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, onSelectedDate: (LocalDate) -> Unit, onAdd: (LocalDate) -> Unit) {
+    val start = anchor.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    ModernCard {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            (0..6).forEach { offset ->
+                val date = start.plusDays(offset.toLong())
+                DayTile(date, byDate[date], Modifier.weight(1f)) {
+                    onSelectedDate(date)
+                    onAdd(date)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, onSelectedDate: (LocalDate) -> Unit, onAdd: (LocalDate) -> Unit) {
+    val month = YearMonth.from(anchor)
+    val first = month.atDay(1)
+    val gridStart = first.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    ModernCard {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("一", "二", "三", "四", "五", "六", "日").forEach {
+                Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        (0..5).forEach { week ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (0..6).forEach { day ->
+                    val date = gridStart.plusDays((week * 7 + day).toLong())
+                    val inMonth = YearMonth.from(date) == month
+                    DayTile(date, byDate[date], Modifier.weight(1f), muted = !inMonth) {
+                        onSelectedDate(date)
+                        onAdd(date)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun YearPanel(anchor: LocalDate, entries: List<UsageEntry>, onMonth: (YearMonth) -> Unit) {
+    val year = anchor.year
+    val byMonth = entries.groupBy { YearMonth.from(it.date) }
+    ModernCard {
+        (0..3).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (1..3).forEach { col ->
+                    val month = YearMonth.of(year, row * 3 + col)
+                    val total = byMonth[month].orEmpty().sumOf { it.kwh }
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onMonth(month) },
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("${month.monthValue} 月", fontWeight = FontWeight.Bold)
+                            Text("${fmt(total)} 度", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DayTile(date: LocalDate, entry: UsageEntry?, modifier: Modifier, muted: Boolean = false, onClick: () -> Unit) {
+    val filled = entry != null
+    Surface(
+        modifier = modifier
+            .height(68.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = when {
+            filled -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (muted) 0.42f else 1f)
+        },
+    ) {
+        Column(Modifier.padding(7.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = "${fmt(current.totalKwh)} 度",
-                fontSize = 40.sp,
+                date.dayOfMonth.toString(),
                 fontWeight = FontWeight.Bold,
+                color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f) else Color.Unspecified,
             )
-            LinearProgressIndicator(
-                progress = (current.totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("当前电价", "${fmt(current.expectedPrice)} 元/度", Modifier.weight(1f))
-                MetricTile("下周期预计", "${fmt(nextCycleEstimatedPrice(current.totalKwh))} 元/度", Modifier.weight(1f))
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("预计电费", "${fmt(money(current.totalKwh * current.expectedPrice))} 元", Modifier.weight(1f))
-                MetricTile(
-                    title = if (totalDifference >= 0) "累计应退" else "累计应补",
-                    value = "${fmt(kotlin.math.abs(totalDifference))} 元",
-                    modifier = Modifier.weight(1f),
-                    valueColor = if (totalDifference >= 0) Color(0xFF047857) else Color(0xFFB91C1C),
+            if (entry != null) {
+                Text("${fmt(entry.kwh)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            } else {
+                Box(
+                    Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f))
                 )
             }
-            if (!current.isComplete) {
+        }
+    }
+}
+
+@Composable
+private fun RecordsSummary(entries: List<UsageEntry>) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        SoftMetric("记录", "${entries.size} 天", Modifier.weight(1f))
+        SoftMetric("用电", "${fmt(entries.sumOf { it.kwh })} 度", Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun CycleCard(
+    summary: CycleSummary,
+    isOverridden: Boolean,
+    settled: Double?,
+    onOverridePrice: (CycleSummary) -> Unit,
+    onSettle: (CycleSummary) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val remaining = settled?.let { money(summary.difference - it) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded },
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("${summary.startDate} - ${summary.endDate}", fontWeight = FontWeight.Bold)
+                    Text(
+                        buildString {
+                            append(if (summary.isComplete) "数据完整" else "缺 ${summary.missingDates.size} 天")
+                            if (isOverridden) append(" · 手动电价")
+                            if (settled != null) append(if (settled >= 0.0) " · 已登记退还" else " · 已登记补缴")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
-                    "数据缺失：本周期还有 ${current.missingDates.size} 天未录入",
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.SemiBold,
+                    if (summary.difference >= 0) "+${fmt(summary.difference)}" else "-${fmt(abs(summary.difference))}",
+                    color = amountColor(summary.difference),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
                 )
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SoftMetric("用电", "${fmt(summary.totalKwh)} 度", Modifier.weight(1f))
+                SoftMetric("应执行", "${fmt(summary.expectedPrice)}", Modifier.weight(1f))
+                SoftMetric("实扣", "${fmt(summary.actualPrice)}", Modifier.weight(1f))
+            }
+            if (remaining != null) {
+                Text(
+                    "已处理 ${fmt(abs(settled))} 元，剩余 ${fmt(abs(remaining))} 元",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onOverridePrice(summary) }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("电价")
+                }
+                Button(onClick = { onSettle(summary) }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("结算")
+                }
+            }
+            if (expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    summary.entries.forEach {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(it.date.toString())
+                            Text("${fmt(it.kwh)} 度")
+                        }
+                    }
+                    if (summary.entries.isEmpty()) Text("本周期还没有记录。")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EntryRow(entry: UsageEntry, onEdit: (UsageEntry) -> Unit, onDelete: (UsageEntry) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(entry.date.toString(), fontWeight = FontWeight.Bold)
+                Text("${fmt(entry.kwh)} 度", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row {
+                IconButton(onClick = { onEdit(entry) }) { Icon(Icons.Default.Edit, contentDescription = "编辑") }
+                IconButton(onClick = { onDelete(entry) }) { Icon(Icons.Default.Delete, contentDescription = "删除") }
             }
         }
     }
@@ -482,157 +879,91 @@ private fun ThresholdCard(totalKwh: Double) {
         totalKwh <= 120.0 -> 120.0
         else -> null
     }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("用电阈值", fontWeight = FontWeight.SemiBold)
-            Text("60 度和 120 度会影响下一个 15 天周期电价。")
-            Text(
-                text = if (nextLimit == null) {
-                    "当前周期已超过 120 度，下周期预计按最高档。"
-                } else {
-                    "距离 ${fmt(nextLimit)} 度还剩 ${fmt(nextLimit - totalKwh)} 度。"
-                },
-                fontWeight = FontWeight.Medium,
-            )
-        }
+    ModernCard {
+        Text("阈值提醒", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text("60 度和 120 度会决定下一个 15 天周期电价。")
+        Text(
+            if (nextLimit == null) "当前周期已超过 120 度，下周期预计按最高档。"
+            else "距离 ${fmt(nextLimit)} 度还剩 ${fmt(nextLimit - totalKwh)} 度。",
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
 @Composable
-private fun CycleCard(
-    summary: CycleSummary,
-    isOverridden: Boolean,
-    onOverridePrice: (CycleSummary) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { expanded = !expanded },
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("${summary.startDate} - ${summary.endDate}", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        text = buildString {
-                            append(if (summary.isComplete) "数据完整" else "缺 ${summary.missingDates.size} 天")
-                            if (isOverridden) append(" · 手动电价")
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (summary.difference >= 0) "+${fmt(summary.difference)}" else "-${fmt(kotlin.math.abs(summary.difference))}",
-                        color = if (summary.difference >= 0) Color(0xFF047857) else Color(0xFFB91C1C),
-                        fontWeight = FontWeight.Bold,
-                    )
-                    IconButton(onClick = { onOverridePrice(summary) }) {
-                        Icon(Icons.Default.Edit, contentDescription = "覆盖电价")
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("总用电", "${fmt(summary.totalKwh)} 度", Modifier.weight(1f))
-                MetricTile("应执行", "${fmt(summary.expectedPrice)} 元", Modifier.weight(1f))
-                MetricTile("实际扣费", "${fmt(summary.actualPrice)} 元", Modifier.weight(1f))
-            }
-            AnimatedVisibility(expanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (summary.entries.isEmpty()) {
-                        Text("本周期还没有记录。")
-                    } else {
-                        summary.entries.forEach {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(it.date.toString())
-                                Text("${fmt(it.kwh)} 度")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EntryRow(entry: UsageEntry, onEdit: (UsageEntry) -> Unit, onDelete: (UsageEntry) -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(entry.date.toString(), fontWeight = FontWeight.SemiBold)
-                Text("${fmt(entry.kwh)} 度", style = MaterialTheme.typography.bodyMedium)
-            }
-            Row {
-                IconButton(onClick = { onEdit(entry) }) {
-                    Icon(Icons.Default.Edit, contentDescription = "编辑")
-                }
-                IconButton(onClick = { onDelete(entry) }) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetricTile(title: String, value: String, modifier: Modifier = Modifier, valueColor: Color = Color.Unspecified) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-    ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium)
-            Text(value, fontWeight = FontWeight.Bold, color = valueColor)
-        }
-    }
-}
-
-@Composable
-private fun SummaryStrip(leftTitle: String, leftValue: String, rightTitle: String, rightValue: String) {
+private fun ModernCard(content: @Composable Column.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricTile(leftTitle, leftValue, Modifier.weight(1f))
-            MetricTile(rightTitle, rightValue, Modifier.weight(1f))
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
+}
+
+@Composable
+private fun GlassMetric(title: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White.copy(alpha = 0.16f),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, color = Color.White.copy(alpha = 0.78f), fontSize = 12.sp)
+            Text(value, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SoftMetric(title: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(value, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 6.dp),
+    Text(text, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(top = 4.dp))
+}
+
+@Composable
+private fun SettingField(
+    value: String,
+    onValue: (String) -> Unit,
+    label: String,
+    keyboardType: KeyboardType = KeyboardType.Decimal,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValue,
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
 @Composable
-private fun EmptyState(text: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(18.dp),
-            style = MaterialTheme.typography.bodyMedium,
-        )
+private fun RuleLine(left: String, right: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(left, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(right, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
-private fun EntryDialog(entry: UsageEntry?, onDismiss: () -> Unit, onSave: (UsageEntry) -> Unit) {
-    var date by remember(entry) { mutableStateOf(entry?.date?.toString() ?: LocalDate.now().toString()) }
+private fun EntryDialog(date: LocalDate, entry: UsageEntry?, onDismiss: () -> Unit, onSave: (UsageEntry) -> Unit) {
+    var dateText by remember(date, entry) { mutableStateOf(entry?.date?.toString() ?: date.toString()) }
     var kwh by remember(entry) { mutableStateOf(entry?.kwh?.let { fmt(it) } ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -641,12 +972,7 @@ private fun EntryDialog(entry: UsageEntry?, onDismiss: () -> Unit, onSave: (Usag
         title = { Text(if (entry == null) "录入用电量" else "编辑用电量") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("日期 YYYY-MM-DD") },
-                    singleLine = true,
-                )
+                OutlinedTextField(dateText, { dateText = it }, label = { Text("日期") }, singleLine = true)
                 OutlinedTextField(
                     value = kwh,
                     onValueChange = { kwh = it },
@@ -659,7 +985,7 @@ private fun EntryDialog(entry: UsageEntry?, onDismiss: () -> Unit, onSave: (Usag
         },
         confirmButton = {
             Button(onClick = {
-                val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
+                val parsedDate = runCatching { LocalDate.parse(dateText) }.getOrNull()
                 val parsedKwh = kwh.toDoubleOrNull()
                 if (parsedDate == null || parsedKwh == null || parsedKwh < 0.0) {
                     error = "请输入正确日期和非负电量。"
@@ -693,8 +1019,8 @@ private fun BatchDialog(onDismiss: () -> Unit, onImport: (BatchParseResult) -> U
         confirmButton = {
             Button(onClick = {
                 val result = parseBatchEntries(text)
-                if (result.entries.isEmpty()) {
-                    message = "没有可导入的数据。"
+                if (result.entries.isEmpty() || result.errors.isNotEmpty()) {
+                    message = result.errors.joinToString("\n").ifBlank { "没有可导入的数据。" }
                 } else {
                     onImport(result)
                 }
@@ -733,38 +1059,112 @@ private fun PriceOverrideDialog(
         confirmButton = {
             Button(onClick = {
                 val parsed = price.toDoubleOrNull()
-                if (parsed == null || parsed < 0.0) {
-                    error = "请输入正确电价。"
-                } else {
-                    onSave(twoDecimals(parsed))
-                }
+                if (parsed == null || parsed < 0.0) error = "请输入正确电价。" else onSave(twoDecimals(parsed))
             }) { Text("保存") }
         },
         dismissButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (isOverridden) {
-                    OutlinedButton(onClick = onClear) { Text("恢复自动") }
-                }
+                if (isOverridden) OutlinedButton(onClick = onClear) { Text("恢复自动") }
                 OutlinedButton(onClick = onDismiss) { Text("取消") }
             }
         },
     )
 }
 
+@Composable
+private fun SettlementDialog(
+    summary: CycleSummary,
+    currentValue: Double?,
+    onDismiss: () -> Unit,
+    onClear: () -> Unit,
+    onSave: (Double) -> Unit,
+) {
+    var amount by remember(summary, currentValue) { mutableStateOf(fmt(currentValue ?: summary.difference)) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("登记实际退补") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("默认填入本周期计算差额：${fmt(summary.difference)} 元")
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it },
+                    label = { Text("实际退补金额") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                )
+                Text("正数表示已退，负数表示已补。", style = MaterialTheme.typography.bodySmall)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val parsed = amount.toDoubleOrNull()
+                if (parsed == null) error = "请输入正确金额。" else onSave(money(parsed))
+            }) { Text("保存") }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (currentValue != null) OutlinedButton(onClick = onClear) { Text("清除") }
+                OutlinedButton(onClick = onDismiss) { Text("取消") }
+            }
+        },
+    )
+}
+
+private fun calendarTitle(mode: RecordMode, anchor: LocalDate): String {
+    return when (mode) {
+        RecordMode.Day -> anchor.toString()
+        RecordMode.Week -> {
+            val start = anchor.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            "${start} - ${start.plusDays(6)}"
+        }
+        RecordMode.Month -> "${anchor.year} 年 ${anchor.monthValue} 月"
+        RecordMode.Year -> "${anchor.year} 年"
+    }
+}
+
+private fun moveAnchor(anchor: LocalDate, mode: RecordMode, amount: Long): LocalDate {
+    return when (mode) {
+        RecordMode.Day -> anchor.plusDays(amount)
+        RecordMode.Week -> anchor.plusWeeks(amount)
+        RecordMode.Month -> anchor.plusMonths(amount)
+        RecordMode.Year -> anchor.plusYears(amount)
+    }
+}
+
+private fun visibleEntries(mode: RecordMode, anchor: LocalDate, entries: List<UsageEntry>): List<UsageEntry> {
+    return entries.filter {
+        when (mode) {
+            RecordMode.Day -> it.date == anchor
+            RecordMode.Week -> {
+                val start = anchor.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+                !it.date.isBefore(start) && !it.date.isAfter(start.plusDays(6))
+            }
+            RecordMode.Month -> YearMonth.from(it.date) == YearMonth.from(anchor)
+            RecordMode.Year -> it.date.year == anchor.year
+        }
+    }
+}
+
+private fun amountColor(amount: Double): Color {
+    return if (amount >= 0) Color(0xFF059669) else Color(0xFFDC2626)
+}
+
 private fun loadSettings(context: Context): AppSettings {
-    val prefs = context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
+    val prefs = prefs(context)
     return AppSettings(
         cycleStartDate = runCatching {
             prefs.getString("cycleStartDate", null)?.let { LocalDate.parse(it) }
         }.getOrNull() ?: LocalDate.now().minusDays(14),
-        initialPrice = readDouble(prefs = prefs, key = "initialPrice", defaultValue = 1.2),
-        actualPrice = readDouble(prefs = prefs, key = "actualPrice", defaultValue = 1.2),
+        initialPrice = readDouble(prefs, "initialPrice", 1.2),
+        actualPrice = readDouble(prefs, "actualPrice", 1.2),
     )
 }
 
 private fun saveSettings(context: Context, settings: AppSettings) {
-    context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
-        .edit()
+    prefs(context).edit()
         .putString("cycleStartDate", settings.cycleStartDate.toString())
         .putString("initialPrice", fmt(settings.initialPrice))
         .putString("actualPrice", fmt(settings.actualPrice))
@@ -772,10 +1172,7 @@ private fun saveSettings(context: Context, settings: AppSettings) {
 }
 
 private fun loadEntries(context: Context): List<UsageEntry> {
-    val raw = context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
-        .getString("entries", "")
-        .orEmpty()
-    return raw.lineSequence().mapNotNull { line ->
+    return prefs(context).getString("entries", "").orEmpty().lineSequence().mapNotNull { line ->
         val parts = line.split('\t')
         val date = parts.getOrNull(0)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
         val kwh = parts.getOrNull(1)?.toDoubleOrNull()
@@ -785,30 +1182,29 @@ private fun loadEntries(context: Context): List<UsageEntry> {
 
 private fun saveEntries(context: Context, entries: List<UsageEntry>) {
     val raw = entries.sortedBy { it.date.toEpochDay() }.joinToString("\n") { "${it.date}\t${fmt(it.kwh)}" }
-    context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
-        .edit()
-        .putString("entries", raw)
-        .apply()
+    prefs(context).edit().putString("entries", raw).apply()
 }
 
-private fun loadManualPrices(context: Context): Map<Int, Double> {
-    val raw = context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
-        .getString("manualPrices", "")
-        .orEmpty()
-    return raw.lineSequence().mapNotNull { line ->
+private fun loadManualPrices(context: Context): Map<Int, Double> = loadIndexedDoubles(context, "manualPrices")
+
+private fun saveManualPrices(context: Context, prices: Map<Int, Double>) = saveIndexedDoubles(context, "manualPrices", prices)
+
+private fun loadSettlements(context: Context): Map<Int, Double> = loadIndexedDoubles(context, "settlements")
+
+private fun saveSettlements(context: Context, prices: Map<Int, Double>) = saveIndexedDoubles(context, "settlements", prices)
+
+private fun loadIndexedDoubles(context: Context, key: String): Map<Int, Double> {
+    return prefs(context).getString(key, "").orEmpty().lineSequence().mapNotNull { line ->
         val parts = line.split('\t')
         val index = parts.getOrNull(0)?.toIntOrNull()
-        val price = parts.getOrNull(1)?.toDoubleOrNull()
-        if (index != null && price != null) index to twoDecimals(price) else null
+        val value = parts.getOrNull(1)?.toDoubleOrNull()
+        if (index != null && value != null) index to twoDecimals(value) else null
     }.toMap()
 }
 
-private fun saveManualPrices(context: Context, prices: Map<Int, Double>) {
-    val raw = prices.toSortedMap().entries.joinToString("\n") { "${it.key}\t${fmt(it.value)}" }
-    context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
-        .edit()
-        .putString("manualPrices", raw)
-        .apply()
+private fun saveIndexedDoubles(context: Context, key: String, values: Map<Int, Double>) {
+    val raw = values.toSortedMap().entries.joinToString("\n") { "${it.key}\t${fmt(it.value)}" }
+    prefs(context).edit().putString(key, raw).apply()
 }
 
 private fun entriesToCsv(entries: List<UsageEntry>): String {
@@ -820,7 +1216,7 @@ private fun entriesToCsv(entries: List<UsageEntry>): String {
     }
 }
 
-private fun readDouble(prefs: android.content.SharedPreferences, key: String, defaultValue: Double): Double {
+private fun readDouble(prefs: SharedPreferences, key: String, defaultValue: Double): Double {
     return when (val value = prefs.all[key]) {
         is String -> value.toDoubleOrNull() ?: defaultValue
         is Float -> twoDecimals(value.toDouble())
@@ -829,5 +1225,8 @@ private fun readDouble(prefs: android.content.SharedPreferences, key: String, de
         else -> defaultValue
     }
 }
+
+private fun prefs(context: Context): SharedPreferences =
+    context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
 
 private fun fmt(value: Double): String = String.format(Locale.US, "%.2f", value)

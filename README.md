@@ -8,15 +8,18 @@
 2. 把本目录所有文件推送到仓库。
 3. 打开 GitHub 仓库的 `Actions` 页面。
 4. 选择 `Android APK` 工作流，点击 `Run workflow`。
-5. 构建完成后，在该次运行页面底部的 `Artifacts` 下载 `electricity-bill-debug-apk`。
-6. 解压后把 `app-debug.apk` 传到安卓手机安装。
+5. 构建完成后，在该次运行页面底部的 `Artifacts` 下载 `electricity-bill-release-apk`。
+6. 解压后把 `app-release.apk` 传到安卓手机安装。`debug` 包只用于排查问题，日常使用建议安装 `release` 包。
 
 ## 当前版本
 
 - 已包含核心计价逻辑。
 - 已包含单日录入、批量录入、记录编辑/删除、周期汇总、差额显示。
 - 已包含底部导航、概览页、记录页、设置页和历史周期展开明细。
+- 记录页支持日 / 周 / 月 / 年切换，月视图以日历方式录入。
 - 支持任意周期手动覆盖应执行电价，并可恢复自动计算。
+- 支持登记每个周期实际已退/已补金额，默认填入计算出的应退/应补金额。
+- 概览页支持按当前周期、历史周期或全部周期查看结算，不再把所有周期混成一个数字。
 - 支持复制每日记录 CSV，便于粘贴到 Excel。
+- GitHub Actions 会同时生成 debug APK 和更适合日常使用的 release APK。
 - 数据暂用本地 SharedPreferences 保存，后续可升级为 Room + DataStore。
-- GitHub Actions 会运行单元测试并生成 debug APK。
