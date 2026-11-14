@@ -28,6 +28,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -65,6 +67,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,11 +82,6 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -108,10 +107,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
-import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneOffset
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import kotlin.math.abs
@@ -362,13 +359,24 @@ private fun ElectricityApp() {
     }
 
     if (showAddSheet) {
-        ModalBottomSheet(onDismissRequest = { showAddSheet = false }) {
-            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("新增用电记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
-                Text("选择录入方式 · 单日或批量", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ModalBottomSheet(
+            onDismissRequest = { showAddSheet = false },
+            containerColor = MaterialTheme.colorScheme.background,
+            dragHandle = {
+                Surface(
+                    Modifier.padding(vertical = 12.dp).width(36.dp).height(4.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                ) {}
+            },
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("用电记录", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                Text("新增记录", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                Text("${selectedDate} · 选择录入方式", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 ActionChoice(
                     title = "单日录入",
-                    detail = "${selectedDate} · ${if (entries.any { it.date == selectedDate }) "编辑已有记录" else "填写当天用电量"}",
+                    detail = "${selectedDate.year}年${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 · ${weekdayLabel(selectedDate)} · ${if (entries.any { it.date == selectedDate }) "编辑已有记录" else "填写当天用电量"}",
                     icon = Icons.Default.Add,
                     onClick = {
                     showAddSheet = false
@@ -525,21 +533,21 @@ private fun ActionChoice(
     Surface(
         modifier = Modifier.fillMaxWidth().pressScale(onClick),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+        color = Color(0xFF171A1F),
     ) {
         Row(
             Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary) {
-                Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(20.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            Surface(shape = RoundedCornerShape(12.dp), color = Color.White.copy(alpha = 0.1f)) {
+                Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(20.dp), tint = MaterialTheme.colorScheme.secondary)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, fontWeight = FontWeight.Bold)
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.64f))
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White.copy(alpha = 0.62f))
         }
     }
 }
@@ -890,7 +898,7 @@ private fun RecordsScreen(
     onAddForDate: (LocalDate) -> Unit,
 ) {
     var mode by remember { mutableStateOf(RecordMode.Month) }
-    var anchor by remember(selectedDate) { mutableStateOf(selectedDate) }
+    var anchor by remember { mutableStateOf(selectedDate) }
     val byDate = entries.associateBy { it.date }
     val visible = visibleEntries(mode, anchor, entries).sortedByDescending { it.date.toEpochDay() }
 
@@ -902,7 +910,10 @@ private fun RecordsScreen(
     ) {
         item { Spacer(Modifier.height(2.dp)) }
         item {
-            ModeSelector(mode) { mode = it }
+            ModeSelector(mode) {
+                mode = it
+                anchor = selectedDate
+            }
         }
         item {
             CalendarHeader(
@@ -921,18 +932,28 @@ private fun RecordsScreen(
         }
         item {
             AnimatedContent(
-                targetState = Triple(mode, anchor, selectedDate),
+                targetState = mode to anchor,
                 transitionSpec = {
                     val direction = if (targetState.second.isAfter(initialState.second)) 1 else -1
                     (fadeIn(tween(180)) + slideInHorizontally(tween(200)) { direction * it / 36 }) togetherWith
                         (fadeOut(tween(100)) + slideOutHorizontally(tween(140)) { -direction * it / 42 })
                 },
                 label = "calendar-period",
-            ) { (displayMode, displayAnchor, displaySelection) ->
+            ) { (displayMode, displayAnchor) ->
                 when (displayMode) {
                     RecordMode.Day -> DayPanel(displayAnchor, byDate[displayAnchor], onAddForDate, onEdit)
-                    RecordMode.Week -> WeekPanel(displayAnchor, byDate, displaySelection, onSelectedDate)
-                    RecordMode.Month -> MonthPanel(displayAnchor, byDate, displaySelection, onSelectedDate)
+                    RecordMode.Week -> WeekPanel(displayAnchor, byDate, selectedDate, onSelectedDate)
+                    RecordMode.Month -> MonthPanel(
+                        displayAnchor,
+                        byDate,
+                        selectedDate,
+                        onSelectDate = { date ->
+                            onSelectedDate(date)
+                            if (YearMonth.from(date) != YearMonth.from(anchor)) {
+                                anchor = YearMonth.from(date).atDay(1)
+                            }
+                        },
+                    )
                     RecordMode.Year -> YearPanel(displayAnchor, entries) { month ->
                         anchor = month.atDay(1)
                         onSelectedDate(month.atDay(1))
@@ -1049,7 +1070,7 @@ private fun SettingsScreen(
     }
 
     if (showStartDatePicker) {
-        DateSelectDialog(
+        DateSelectSheet(
             initialDate = runCatching { LocalDate.parse(startDate) }.getOrNull() ?: LocalDate.now(),
             onDismiss = { showStartDatePicker = false },
             onSelected = {
@@ -1196,7 +1217,7 @@ private fun WeekPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, sel
 }
 
 @Composable
-private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, selectedDate: LocalDate, onSelectedDate: (LocalDate) -> Unit) {
+private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, selectedDate: LocalDate, onSelectDate: (LocalDate) -> Unit) {
     val month = YearMonth.from(anchor)
     val first = month.atDay(1)
     val gridStart = first.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -1212,7 +1233,7 @@ private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, se
                     val date = gridStart.plusDays((week * 7 + day).toLong())
                     val inMonth = YearMonth.from(date) == month
                     DayTile(date, byDate[date], Modifier.weight(1f), muted = !inMonth, selected = date == selectedDate) {
-                        onSelectedDate(date)
+                        onSelectDate(date)
                     }
                 }
             }
@@ -1540,41 +1561,94 @@ private fun SettingField(
 
 @Composable
 private fun DatePickerField(label: String, value: String, onClick: () -> Unit) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+    val date = runCatching { LocalDate.parse(value) }.getOrNull()
+    Surface(
+        modifier = Modifier.fillMaxWidth().pressScale(onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.68f),
     ) {
-        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.Start) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.padding(10.dp).size(20.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    date?.let { "${it.year}年${it.monthValue}月${it.dayOfMonth}日 · ${weekdayLabel(it)}" } ?: value,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RentDayPicker(rentDay: Int, onChange: (Int) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(
-            onClick = { expanded = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
+    var showPicker by remember { mutableStateOf(false) }
+    Surface(
+        modifier = Modifier.fillMaxWidth().pressScale { showPicker = true },
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.68f),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.Start) {
-                Text("交租日", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("每月 ${rentDay} 日", style = MaterialTheme.typography.bodyLarge)
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                Text("${rentDay}", modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp), fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("交租日", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("每月 ${rentDay} 日", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = "选择交租日", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            (1..31).forEach { day ->
-                DropdownMenuItem(
-                    text = { Text("每月 $day 日") },
-                    onClick = {
-                        onChange(day)
-                        expanded = false
-                    },
-                )
+    }
+    if (showPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { showPicker = false },
+            containerColor = MaterialTheme.colorScheme.background,
+            dragHandle = { SheetHandle() },
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("账单周期", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                Text("选择交租日", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                Text("每月 ${rentDay} 日开始新的交租周期", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                (0..4).forEach { week ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (0..6).forEach { column ->
+                            val day = week * 7 + column + 1
+                            if (day <= 31) {
+                                val selected = day == rentDay
+                                Surface(
+                                    modifier = Modifier.weight(1f).aspectRatio(1f).pressScale {
+                                        onChange(day)
+                                        showPicker = false
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                    border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text("$day", fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
+                            } else {
+                                Spacer(Modifier.weight(1f).aspectRatio(1f))
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
@@ -1582,19 +1656,96 @@ private fun RentDayPicker(rentDay: Int, onChange: (Int) -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DateSelectDialog(initialDate: LocalDate, onDismiss: () -> Unit, onSelected: (LocalDate) -> Unit) {
-    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialDate.toUtcMillis())
-    DatePickerDialog(
+private fun DateSelectSheet(initialDate: LocalDate, onDismiss: () -> Unit, onSelected: (LocalDate) -> Unit) {
+    var visibleMonth by remember(initialDate) { mutableStateOf(YearMonth.from(initialDate)) }
+    var selectedDate by remember(initialDate) { mutableStateOf(initialDate) }
+    val firstDay = visibleMonth.atDay(1)
+    val gridStart = firstDay.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                pickerState.selectedDateMillis?.let { onSelected(it.toLocalDateUtc()) } ?: onDismiss()
-            }) { Text("确定") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        containerColor = MaterialTheme.colorScheme.background,
+        dragHandle = { SheetHandle() },
     ) {
-        DatePicker(state = pickerState)
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("日期", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                    Text("选择日期", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
+                }
+                IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "关闭") }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                IconButton(onClick = { visibleMonth = visibleMonth.minusMonths(1) }) { Icon(Icons.Default.ChevronLeft, contentDescription = "上个月") }
+                AnimatedContent(
+                    targetState = visibleMonth,
+                    transitionSpec = { fadeIn(tween(130)) togetherWith fadeOut(tween(90)) },
+                    label = "date-picker-month",
+                ) { month -> Text("${month.year}年${month.monthValue}月", fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+                IconButton(onClick = { visibleMonth = visibleMonth.plusMonths(1) }) { Icon(Icons.Default.ChevronRight, contentDescription = "下个月") }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("一", "二", "三", "四", "五", "六", "日").forEach { day ->
+                    Text(day, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            (0..5).forEach { week ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (0..6).forEach { column ->
+                        val date = gridStart.plusDays((week * 7 + column).toLong())
+                        val inMonth = YearMonth.from(date) == visibleMonth
+                        val selected = date == selectedDate
+                        val dayColor by animateColorAsState(
+                            targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                            animationSpec = tween(140),
+                            label = "date-picker-day",
+                        )
+                        Surface(
+                            modifier = Modifier.weight(1f).aspectRatio(1f).pressScale {
+                                selectedDate = date
+                                visibleMonth = YearMonth.from(date)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = dayColor,
+                            border = if (date == LocalDate.now() && !selected) BorderStroke(1.dp, MaterialTheme.colorScheme.secondary) else null,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    "${date.dayOfMonth}",
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = when {
+                                        selected -> MaterialTheme.colorScheme.onPrimary
+                                        inMonth -> MaterialTheme.colorScheme.onSurface
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth().pressScale { onSelected(selectedDate) },
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primary,
+            ) {
+                Row(Modifier.padding(horizontal = 18.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("确定 ${selectedDate.year}年${selectedDate.monthValue}月${selectedDate.dayOfMonth}日", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
     }
+}
+
+@Composable
+private fun SheetHandle() {
+    Surface(
+        Modifier.padding(vertical = 12.dp).width(36.dp).height(4.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.outlineVariant,
+    ) {}
 }
 
 @Composable
@@ -1614,14 +1765,25 @@ private fun EntryDialog(date: LocalDate, entry: UsageEntry?, onDismiss: () -> Un
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (entry == null) "录入用电量" else "编辑用电量") },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("每日记录", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                Text(if (entry == null) "录入用电量" else "编辑用电量", fontWeight = FontWeight.ExtraBold)
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("选择日期并填写当天电表用量。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 DatePickerField("日期", dateText) { showDatePicker = true }
                 OutlinedTextField(
                     value = kwh,
                     onValueChange = { kwh = it },
-                    label = { Text("用电量（度）") },
+                    label = { Text("用电量") },
+                    trailingIcon = { Text("度", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    textStyle = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
@@ -1630,21 +1792,27 @@ private fun EntryDialog(date: LocalDate, entry: UsageEntry?, onDismiss: () -> Un
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val parsedDate = runCatching { LocalDate.parse(dateText) }.getOrNull()
-                val parsedKwh = kwh.toDoubleOrNull()
-                if (parsedDate == null || parsedKwh == null || parsedKwh < 0.0) {
-                    error = "请输入正确日期和非负电量。"
-                } else {
-                    onSave(UsageEntry(parsedDate, twoDecimals(parsedKwh)))
-                }
-            }) { Text("保存") }
+            Surface(
+                modifier = Modifier.pressScale {
+                    val parsedDate = runCatching { LocalDate.parse(dateText) }.getOrNull()
+                    val parsedKwh = kwh.toDoubleOrNull()
+                    if (parsedDate == null || parsedKwh == null || parsedKwh < 0.0) {
+                        error = "请输入正确日期和非负电量。"
+                    } else {
+                        onSave(UsageEntry(parsedDate, twoDecimals(parsedKwh)))
+                    }
+                },
+                shape = RoundedCornerShape(13.dp),
+                color = MaterialTheme.colorScheme.primary,
+            ) {
+                Text("保存记录", modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+            }
         },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 
     if (showDatePicker) {
-        DateSelectDialog(
+        DateSelectSheet(
             initialDate = runCatching { LocalDate.parse(dateText) }.getOrNull() ?: date,
             onDismiss = { showDatePicker = false },
             onSelected = {
@@ -1661,30 +1829,47 @@ private fun BatchDialog(onDismiss: () -> Unit, onImport: (BatchParseResult) -> U
     var message by remember { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("批量录入") },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("批量导入", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                Text("多日用电记录", fontWeight = FontWeight.ExtraBold)
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("每行填写一个日期和用电量。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    label = { Text("每行：2026-08-01 12.34") },
+                    label = { Text("日期    用电量") },
+                    placeholder = { Text("2026-08-01  12.34") },
                     minLines = 6,
                     shape = RoundedCornerShape(14.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                 )
                 message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val result = parseBatchEntries(text)
-                if (result.entries.isEmpty() || result.errors.isNotEmpty()) {
-                    message = result.errors.joinToString("\n").ifBlank { "没有可导入的数据。" }
-                } else {
-                    onImport(result)
-                }
-            }) { Text("导入") }
+            Surface(
+                modifier = Modifier.pressScale {
+                    val result = parseBatchEntries(text)
+                    if (result.entries.isEmpty() || result.errors.isNotEmpty()) {
+                        message = result.errors.joinToString("\n").ifBlank { "没有可导入的数据。" }
+                    } else {
+                        onImport(result)
+                    }
+                },
+                shape = RoundedCornerShape(13.dp),
+                color = MaterialTheme.colorScheme.primary,
+            ) {
+                Text("导入记录", modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+            }
         },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -1892,7 +2077,3 @@ private fun prefs(context: Context): SharedPreferences =
     context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
 
 private fun fmt(value: Double): String = String.format(Locale.US, "%.2f", value)
-
-private fun LocalDate.toUtcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-
-private fun Long.toLocalDateUtc(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
