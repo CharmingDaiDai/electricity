@@ -25,6 +25,7 @@ fun encodeBackup(
     appendLine("cycleStartDate\t${settings.cycleStartDate}")
     appendLine("initialPrice\t${formatBackupDouble(settings.initialPrice)}")
     appendLine("actualPrice\t${formatBackupDouble(settings.actualPrice)}")
+    appendLine("rentDay\t${settings.rentDay}")
     appendLine("[entries]")
     entries.sortedBy { it.date.toEpochDay() }.forEach { entry ->
         appendLine("${entry.date}\t${formatBackupDouble(entry.kwh)}")
@@ -50,6 +51,7 @@ fun decodeBackup(raw: String): BackupSnapshot? {
     var cycleStartDate: LocalDate? = null
     var initialPrice = 1.2
     var actualPrice = 1.2
+    var rentDay = 1
     val entries = mutableListOf<UsageEntry>()
     val manualPrices = mutableMapOf<Int, Double>()
     val settlements = mutableMapOf<Int, Double>()
@@ -65,6 +67,7 @@ fun decodeBackup(raw: String): BackupSnapshot? {
                 "cycleStartDate" -> cycleStartDate = runCatching { LocalDate.parse(parts.getOrNull(1).orEmpty()) }.getOrNull()
                 "initialPrice" -> initialPrice = parts.getOrNull(1)?.toDoubleOrNull() ?: return@forEach
                 "actualPrice" -> actualPrice = parts.getOrNull(1)?.toDoubleOrNull() ?: return@forEach
+                "rentDay" -> rentDay = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(1, 31) ?: return@forEach
             }
             "entries" -> {
                 val date = runCatching { LocalDate.parse(parts.getOrNull(0).orEmpty()) }.getOrNull()
@@ -84,7 +87,7 @@ fun decodeBackup(raw: String): BackupSnapshot? {
 
     val date = cycleStartDate ?: return null
     return BackupSnapshot(
-        settings = AppSettings(date, twoDecimals(initialPrice), twoDecimals(actualPrice)),
+        settings = AppSettings(date, twoDecimals(initialPrice), twoDecimals(actualPrice), rentDay),
         entries = entries.distinctBy { it.date }.sortedBy { it.date.toEpochDay() },
         manualPrices = manualPrices.toMap(),
         settlements = settlements.toMap(),

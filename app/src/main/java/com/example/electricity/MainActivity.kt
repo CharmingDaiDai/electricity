@@ -50,14 +50,23 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -70,7 +79,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -81,14 +89,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneOffset
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 import kotlin.math.abs
 
 private enum class Screen { Home, Records, Settings }
 private enum class RecordMode { Day, Week, Month, Year }
+private enum class OverviewMode { Cycle, MonthToDate, SinceRentDay, RentWindow, All }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -114,27 +125,27 @@ class MainActivity : ComponentActivity() {
 private fun ElectricityTheme(content: @Composable () -> Unit) {
     val colors = if (isSystemInDarkTheme()) {
         darkColorScheme(
-            primary = Color(0xFF7DD3FC),
-            onPrimary = Color(0xFF082F49),
-            primaryContainer = Color(0xFF0F3A4A),
-            onPrimaryContainer = Color(0xFFE0F2FE),
-            secondary = Color(0xFF5EEAD4),
-            secondaryContainer = Color(0xFF123A3A),
-            surface = Color(0xFF111318),
-            surfaceVariant = Color(0xFF242832),
-            background = Color(0xFF080A0F),
+            primary = Color(0xFFF2F4F5),
+            onPrimary = Color(0xFF17191C),
+            primaryContainer = Color(0xFF30343A),
+            onPrimaryContainer = Color(0xFFF2F4F5),
+            secondary = Color(0xFFE0A27E),
+            secondaryContainer = Color(0xFF4B3025),
+            surface = Color(0xFF151719),
+            surfaceVariant = Color(0xFF26292D),
+            background = Color(0xFF0D0F10),
         )
     } else {
         lightColorScheme(
-            primary = Color(0xFF075985),
+            primary = Color(0xFF202428),
             onPrimary = Color.White,
-            primaryContainer = Color(0xFFE0F2FE),
-            onPrimaryContainer = Color(0xFF0C4A6E),
-            secondary = Color(0xFF0F766E),
-            secondaryContainer = Color(0xFFCCFBF1),
-            surface = Color(0xFFFFFCF7),
-            surfaceVariant = Color(0xFFEFF4F8),
-            background = Color(0xFFF6F8FB),
+            primaryContainer = Color(0xFFE4E7E9),
+            onPrimaryContainer = Color(0xFF202428),
+            secondary = Color(0xFFB85C36),
+            secondaryContainer = Color(0xFFF5E1D7),
+            surface = Color(0xFFFFFFFF),
+            surfaceVariant = Color(0xFFF0F1F2),
+            background = Color(0xFFF6F6F4),
         )
     }
     MaterialTheme(colorScheme = colors, content = content)
@@ -150,6 +161,7 @@ private fun ElectricityApp() {
     var manualPrices by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
     var settlements by remember { mutableStateOf<Map<Int, Double>>(emptyMap()) }
     var settlementFocus by remember { mutableStateOf<Int?>(currentIndex) }
+    var overviewMode by remember { mutableStateOf(OverviewMode.Cycle) }
     var screen by remember { mutableStateOf(Screen.Home) }
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var editingEntry by remember { mutableStateOf<UsageEntry?>(null) }
@@ -157,6 +169,7 @@ private fun ElectricityApp() {
     var settlingCycle by remember { mutableStateOf<CycleSummary?>(null) }
     var showEntryDialog by remember { mutableStateOf(false) }
     var showBatchDialog by remember { mutableStateOf(false) }
+    var showAddSheet by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -186,27 +199,26 @@ private fun ElectricityApp() {
 
     val summaries = buildCycleSummaries(entries, settings, manualPrices = manualPrices)
     val current = summaries.lastOrNull { it.index == currentIndex } ?: summaries.last()
-    val totalDifference = money(summaries.sumOf { it.difference })
-    val totalSettled = money(settlements.values.sum())
 
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = {
-                    Text(
-                        when (screen) {
-                            Screen.Home -> "电费"
-                            Screen.Records -> "日历"
-                            Screen.Settings -> "设置"
-                        },
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                actions = {
-                    IconButton(onClick = { showBatchDialog = true }) {
-                        Icon(Icons.Default.Upload, contentDescription = "批量录入")
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            when (screen) {
+                                Screen.Home -> "概览"
+                                Screen.Records -> "记录"
+                                Screen.Settings -> "设置"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                        )
+                        Text("电费记录", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
+                actions = {},
             )
         },
         bottomBar = {
@@ -221,12 +233,9 @@ private fun ElectricityApp() {
         floatingActionButton = {
             if (screen != Screen.Settings) {
                 ExtendedFloatingActionButton(
-                    onClick = {
-                        editingEntry = entries.firstOrNull { it.date == selectedDate }
-                        showEntryDialog = true
-                    },
+                    onClick = { showAddSheet = true },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("录入") },
+                    text = { Text("新增记录") },
                 )
             }
         },
@@ -244,9 +253,10 @@ private fun ElectricityApp() {
                     manualPrices = manualPrices,
                     settlements = settlements,
                     settlementFocus = settlementFocus,
-                    totalDifference = totalDifference,
-                    totalSettled = totalSettled,
+                    overviewMode = overviewMode,
+                    rentDay = settings.rentDay,
                     onSettlementFocus = { settlementFocus = it },
+                    onOverviewMode = { overviewMode = it },
                     onOverridePrice = { overridingCycle = it },
                     onSettle = { settlingCycle = it },
                 )
@@ -297,6 +307,32 @@ private fun ElectricityApp() {
                 showEntryDialog = false
             },
         )
+    }
+
+    if (showAddSheet) {
+        ModalBottomSheet(onDismissRequest = { showAddSheet = false }) {
+            Text("新增记录", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            ListItem(
+                headlineContent = { Text("单日录入") },
+                supportingContent = { Text("为某一天添加或修改用电量") },
+                leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
+                modifier = Modifier.clickable {
+                    showAddSheet = false
+                    editingEntry = entries.firstOrNull { it.date == selectedDate }
+                    showEntryDialog = true
+                },
+            )
+            ListItem(
+                headlineContent = { Text("批量录入") },
+                supportingContent = { Text("粘贴多行日期和用电量") },
+                leadingContent = { Icon(Icons.Default.Upload, contentDescription = null) },
+                modifier = Modifier.clickable {
+                    showAddSheet = false
+                    showBatchDialog = true
+                },
+            )
+            Spacer(Modifier.height(24.dp))
+        }
     }
 
     if (showBatchDialog) {
@@ -423,6 +459,69 @@ private fun NavItem(
     }
 }
 
+private data class OverviewWindow(
+    val title: String,
+    val start: LocalDate,
+    val end: LocalDate,
+    val totalKwh: Double,
+    val difference: Double,
+    val settled: Double,
+    val reference: CycleSummary? = null,
+)
+
+private fun buildOverviewWindow(
+    mode: OverviewMode,
+    selectedCycle: Int?,
+    current: CycleSummary,
+    summaries: List<CycleSummary>,
+    entries: List<UsageEntry>,
+    settlements: Map<Int, Double>,
+    rentDay: Int,
+    today: LocalDate = LocalDate.now(),
+): OverviewWindow {
+    val selected = selectedCycle?.let { index -> summaries.firstOrNull { it.index == index } } ?: current
+    val (title, start, end) = when (mode) {
+        OverviewMode.Cycle -> Triple("计费周期", selected.startDate, selected.endDate)
+        OverviewMode.MonthToDate -> Triple("本月至今", today.withDayOfMonth(1), today)
+        OverviewMode.SinceRentDay -> {
+            val rentDate = latestRentDate(today, rentDay)
+            Triple("交租以来", rentDate, today)
+        }
+        OverviewMode.RentWindow -> {
+            val rentDate = latestRentDate(today, rentDay)
+            val nextRentDate = rentDateInMonth(YearMonth.from(rentDate).plusMonths(1), rentDay)
+            Triple("交租周期", rentDate, nextRentDate.minusDays(1))
+        }
+        OverviewMode.All -> Triple("全部记录", summaries.firstOrNull()?.startDate ?: today, today)
+    }
+    val visibleEntries = entries.filter { !it.date.isBefore(start) && !it.date.isAfter(end) }
+    val completeCycles = summaries.filter { !it.startDate.isBefore(start) && !it.endDate.isAfter(end) }
+    val difference = if (mode == OverviewMode.Cycle) selected.difference else money(completeCycles.sumOf { it.difference })
+    val settled = if (mode == OverviewMode.Cycle) {
+        settlements[selected.index] ?: 0.0
+    } else {
+        money(completeCycles.sumOf { settlements[it.index] ?: 0.0 })
+    }
+    return OverviewWindow(
+        title = title,
+        start = start,
+        end = end,
+        totalKwh = twoDecimals(visibleEntries.sumOf { it.kwh }),
+        difference = difference,
+        settled = settled,
+        reference = selected,
+    )
+}
+
+private fun latestRentDate(date: LocalDate, rentDay: Int): LocalDate {
+    val safeDay = rentDay.coerceIn(1, 31)
+    val thisMonth = rentDateInMonth(YearMonth.from(date), safeDay)
+    return if (thisMonth.isAfter(date)) thisMonth.minusMonths(1) else thisMonth
+}
+
+private fun rentDateInMonth(month: YearMonth, rentDay: Int): LocalDate =
+    month.atDay(rentDay.coerceIn(1, 31).coerceAtMost(month.lengthOfMonth()))
+
 @Composable
 private fun HomeScreen(
     current: CycleSummary,
@@ -430,21 +529,23 @@ private fun HomeScreen(
     manualPrices: Map<Int, Double>,
     settlements: Map<Int, Double>,
     settlementFocus: Int?,
-    totalDifference: Double,
-    totalSettled: Double,
+    overviewMode: OverviewMode,
+    rentDay: Int,
     onSettlementFocus: (Int?) -> Unit,
+    onOverviewMode: (OverviewMode) -> Unit,
     onOverridePrice: (CycleSummary) -> Unit,
     onSettle: (CycleSummary) -> Unit,
 ) {
-    val focused = settlementFocus?.let { index -> summaries.firstOrNull { it.index == index } }
-    val displaySummary = focused ?: current
-    val displayDifference = focused?.difference ?: totalDifference
-    val displaySettled = focused?.let { settlements[it.index] ?: 0.0 } ?: totalSettled
-    val displayPeriod = if (focused == null) {
-        "${summaries.firstOrNull()?.startDate ?: current.startDate} - ${summaries.lastOrNull()?.endDate ?: current.endDate}"
-    } else {
-        "${displaySummary.startDate} - ${displaySummary.endDate}"
-    }
+    val window = buildOverviewWindow(
+        mode = overviewMode,
+        selectedCycle = settlementFocus,
+        current = current,
+        summaries = summaries,
+        entries = summaries.flatMap { it.entries }.distinctBy { it.date },
+        settlements = settlements,
+        rentDay = rentDay,
+    )
+    val displaySummary = window.reference ?: current
     LazyColumn(
         Modifier
             .fillMaxSize()
@@ -456,17 +557,20 @@ private fun HomeScreen(
             SettlementScopePicker(
                 summaries = summaries,
                 selectedIndex = settlementFocus,
+                mode = overviewMode,
+                rentDay = rentDay,
+                onMode = onOverviewMode,
                 onSelected = onSettlementFocus,
             )
         }
         item {
             HeroCard(
                 summary = displaySummary,
-                scopeLabel = if (focused == null) "全部周期" else "选中周期",
-                periodLabel = displayPeriod,
-                totalKwh = if (focused == null) summaries.sumOf { it.totalKwh } else displaySummary.totalKwh,
-                totalDifference = displayDifference,
-                totalSettled = displaySettled,
+                scopeLabel = window.title,
+                periodLabel = "${window.start} - ${window.end}",
+                totalKwh = window.totalKwh,
+                totalDifference = window.difference,
+                totalSettled = window.settled,
             )
         }
         item { ThresholdCard(current.totalKwh) }
@@ -488,21 +592,38 @@ private fun HomeScreen(
 private fun SettlementScopePicker(
     summaries: List<CycleSummary>,
     selectedIndex: Int?,
+    mode: OverviewMode,
+    rentDay: Int,
+    onMode: (OverviewMode) -> Unit,
     onSelected: (Int?) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("结算查看", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("查看范围", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            ScopeChip("全部", selectedIndex == null) { onSelected(null) }
-            summaries.reversed().forEach { summary ->
-                ScopeChip(
-                    label = "${summary.startDate.monthValue}/${summary.startDate.dayOfMonth}",
-                    selected = selectedIndex == summary.index,
-                ) { onSelected(summary.index) }
+            ScopeChip("计费周期", mode == OverviewMode.Cycle) { onMode(OverviewMode.Cycle) }
+            ScopeChip("本月至今", mode == OverviewMode.MonthToDate) { onMode(OverviewMode.MonthToDate) }
+            ScopeChip("交租以来", mode == OverviewMode.SinceRentDay) { onMode(OverviewMode.SinceRentDay) }
+            ScopeChip("交租周期", mode == OverviewMode.RentWindow) { onMode(OverviewMode.RentWindow) }
+            ScopeChip("全部", mode == OverviewMode.All) { onMode(OverviewMode.All) }
+        }
+        if (mode == OverviewMode.Cycle) {
+            Text("选择具体计费周期", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                summaries.reversed().forEach { summary ->
+                    ScopeChip(
+                        label = "${summary.startDate.monthValue}/${summary.startDate.dayOfMonth}",
+                        selected = selectedIndex == summary.index,
+                    ) { onSelected(summary.index) }
+                }
             }
+        } else {
+            Text("交租日：每月 ${rentDay} 日", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -541,14 +662,7 @@ private fun HeroCard(
     ) {
         Box(
             Modifier
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary,
-                        )
-                    )
-                )
+                .background(MaterialTheme.colorScheme.primary)
                 .padding(20.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -558,7 +672,7 @@ private fun HeroCard(
                 }
                 Text("${fmt(totalKwh)} 度", color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Bold)
                 LinearProgressIndicator(
-                    progress = (summary.totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
+                    progress = (totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
                     modifier = Modifier.fillMaxWidth(),
                     color = Color.White,
                     trackColor = Color.White.copy(alpha = 0.24f),
@@ -641,6 +755,8 @@ private fun SettingsScreen(
     var startDate by remember(settings) { mutableStateOf(settings.cycleStartDate.toString()) }
     var initialPrice by remember(settings) { mutableStateOf(fmt(settings.initialPrice)) }
     var actualPrice by remember(settings) { mutableStateOf(fmt(settings.actualPrice)) }
+    var rentDay by remember(settings) { mutableStateOf(settings.rentDay) }
+    var showStartDatePicker by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("设置会立即影响所有周期计算。") }
 
     LazyColumn(
@@ -653,7 +769,8 @@ private fun SettingsScreen(
         item {
             ModernCard {
                 Text("计费规则", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                SettingField(startDate, { startDate = it }, "周期开始日期", KeyboardType.Text)
+                DatePickerField("周期开始日期", startDate) { showStartDatePicker = true }
+                RentDayPicker(rentDay, onChange = { rentDay = it })
                 SettingField(initialPrice, { initialPrice = it }, "首个周期电价")
                 SettingField(actualPrice, { actualPrice = it }, "公寓实际扣费单价")
                 Button(
@@ -665,7 +782,7 @@ private fun SettingsScreen(
                         if (date == null || initial == null || actual == null) {
                             message = "请检查日期和价格格式。"
                         } else {
-                            onSave(AppSettings(date, twoDecimals(initial), twoDecimals(actual)))
+                            onSave(AppSettings(date, twoDecimals(initial), twoDecimals(actual), rentDay))
                             message = "已保存。"
                         }
                     },
@@ -701,6 +818,17 @@ private fun SettingsScreen(
             }
         }
         item { Spacer(Modifier.height(96.dp)) }
+    }
+
+    if (showStartDatePicker) {
+        DateSelectDialog(
+            initialDate = runCatching { LocalDate.parse(startDate) }.getOrNull() ?: LocalDate.now(),
+            onDismiss = { showStartDatePicker = false },
+            onSelected = {
+                startDate = it.toString()
+                showStartDatePicker = false
+            },
+        )
     }
 }
 
@@ -1060,6 +1188,65 @@ private fun SettingField(
 }
 
 @Composable
+private fun DatePickerField(label: String, value: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.Start) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+@Composable
+private fun RentDayPicker(rentDay: Int, onChange: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.Start) {
+                Text("交租日", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("每月 ${rentDay} 日", style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            (1..31).forEach { day ->
+                DropdownMenuItem(
+                    text = { Text("每月 $day 日") },
+                    onClick = {
+                        onChange(day)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateSelectDialog(initialDate: LocalDate, onDismiss: () -> Unit, onSelected: (LocalDate) -> Unit) {
+    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialDate.toUtcMillis())
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                pickerState.selectedDateMillis?.let { onSelected(it.toLocalDateUtc()) } ?: onDismiss()
+            }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    ) {
+        DatePicker(state = pickerState)
+    }
+}
+
+@Composable
 private fun RuleLine(left: String, right: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(left, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1072,13 +1259,14 @@ private fun EntryDialog(date: LocalDate, entry: UsageEntry?, onDismiss: () -> Un
     var dateText by remember(date, entry) { mutableStateOf(entry?.date?.toString() ?: date.toString()) }
     var kwh by remember(entry) { mutableStateOf(entry?.kwh?.let { fmt(it) } ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (entry == null) "录入用电量" else "编辑用电量") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(dateText, { dateText = it }, label = { Text("日期") }, singleLine = true)
+                DatePickerField("日期", dateText) { showDatePicker = true }
                 OutlinedTextField(
                     value = kwh,
                     onValueChange = { kwh = it },
@@ -1102,6 +1290,17 @@ private fun EntryDialog(date: LocalDate, entry: UsageEntry?, onDismiss: () -> Un
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("取消") } },
     )
+
+    if (showDatePicker) {
+        DateSelectDialog(
+            initialDate = runCatching { LocalDate.parse(dateText) }.getOrNull() ?: date,
+            onDismiss = { showDatePicker = false },
+            onSelected = {
+                dateText = it.toString()
+                showDatePicker = false
+            },
+        )
+    }
 }
 
 @Composable
@@ -1266,6 +1465,7 @@ private fun loadSettings(context: Context): AppSettings {
         }.getOrNull() ?: LocalDate.now().minusDays(14),
         initialPrice = readDouble(prefs, "initialPrice", 1.2),
         actualPrice = readDouble(prefs, "actualPrice", 1.2),
+        rentDay = prefs.getInt("rentDay", 1).coerceIn(1, 31),
     )
 }
 
@@ -1274,6 +1474,7 @@ private fun saveSettings(context: Context, settings: AppSettings) {
         .putString("cycleStartDate", settings.cycleStartDate.toString())
         .putString("initialPrice", fmt(settings.initialPrice))
         .putString("actualPrice", fmt(settings.actualPrice))
+        .putInt("rentDay", settings.rentDay.coerceIn(1, 31))
         .apply()
 }
 
@@ -1336,3 +1537,7 @@ private fun prefs(context: Context): SharedPreferences =
     context.getSharedPreferences("electricity", Context.MODE_PRIVATE)
 
 private fun fmt(value: Double): String = String.format(Locale.US, "%.2f", value)
+
+private fun LocalDate.toUtcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+private fun Long.toLocalDateUtc(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()

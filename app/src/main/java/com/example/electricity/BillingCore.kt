@@ -15,6 +15,7 @@ data class AppSettings(
     val cycleStartDate: LocalDate,
     val initialPrice: Double = 1.2,
     val actualPrice: Double = 1.2,
+    val rentDay: Int = 1,
 )
 
 data class CycleSummary(

@@ -75,7 +75,7 @@ class BillingCoreTest {
 
     @Test
     fun backupRoundTripPreservesAllUserData() {
-        val settings = AppSettings(LocalDate.parse("2026-08-01"), 1.2, 1.2)
+        val settings = AppSettings(LocalDate.parse("2026-08-01"), 1.2, 1.2, 31)
         val entries = listOf(UsageEntry(LocalDate.parse("2026-08-03"), 12.34))
         val raw = encodeBackup(settings, entries, mapOf(2 to 0.95), mapOf(2 to -3.2))
 
