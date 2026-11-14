@@ -49,7 +49,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -190,9 +189,11 @@ private fun ElectricityApp() {
         },
         bottomBar = {
             NavigationBar {
-                NavItem(screen == Screen.Home, { screen = Screen.Home }, Icons.Default.Home, "概览")
-                NavItem(screen == Screen.Records, { screen = Screen.Records }, Icons.Default.List, "日历")
-                NavItem(screen == Screen.Settings, { screen = Screen.Settings }, Icons.Default.Settings, "设置")
+                Row(Modifier.fillMaxWidth()) {
+                    NavItem(Modifier.weight(1f), screen == Screen.Home, { screen = Screen.Home }, Icons.Default.Home, "概览")
+                    NavItem(Modifier.weight(1f), screen == Screen.Records, { screen = Screen.Records }, Icons.Default.List, "日历")
+                    NavItem(Modifier.weight(1f), screen == Screen.Settings, { screen = Screen.Settings }, Icons.Default.Settings, "设置")
+                }
             }
         },
         floatingActionButton = {
@@ -322,13 +323,36 @@ private fun ElectricityApp() {
 }
 
 @Composable
-private fun NavItem(selected: Boolean, onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
-    androidx.compose.material3.NavigationBarItem(
-        selected = selected,
-        onClick = onClick,
-        icon = { Icon(icon, contentDescription = null) },
-        label = { Text(label) },
-    )
+private fun NavItem(
+    modifier: Modifier,
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+) {
+    Surface(
+        modifier = modifier
+            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                label,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
 }
 
 @Composable
