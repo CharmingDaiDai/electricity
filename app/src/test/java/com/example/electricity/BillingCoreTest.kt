@@ -72,4 +72,32 @@ class BillingCoreTest {
         assertEquals(0.8, summaries[0].expectedPrice, 0.0)
         assertEquals(1.2, summaries[1].expectedPrice, 0.0)
     }
+
+    @Test
+    fun backupRoundTripPreservesAllUserData() {
+        val settings = AppSettings(LocalDate.parse("2026-08-01"), 1.2, 1.2)
+        val entries = listOf(UsageEntry(LocalDate.parse("2026-08-03"), 12.34))
+        val raw = encodeBackup(settings, entries, mapOf(2 to 0.95), mapOf(2 to -3.2))
+
+        val restored = decodeBackup(raw)
+
+        assertEquals(settings, restored?.settings)
+        assertEquals(entries, restored?.entries)
+        assertEquals(mapOf(2 to 0.95), restored?.manualPrices)
+        assertEquals(mapOf(2 to -3.2), restored?.settlements)
+    }
+
+    @Test
+    fun backupRejectsUnknownFormat() {
+        assertEquals(null, decodeBackup("not-an-electricity-backup"))
+    }
+
+    @Test
+    fun backupAcceptsLegacyCsvWithoutTreatingItAsFullBackup() {
+        val restored = decodeBackup("date,kwh\n2026-08-03,12.34")
+
+        assertTrue(restored?.isLegacyCsv == true)
+        assertEquals(1, restored?.entries?.size)
+        assertEquals(12.34, restored?.entries?.first()?.kwh ?: 0.0, 0.0)
+    }
 }

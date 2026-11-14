@@ -2,10 +2,13 @@ package com.example.electricity
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -154,6 +157,25 @@ private fun ElectricityApp() {
     var settlingCycle by remember { mutableStateOf<CycleSummary?>(null) }
     var showEntryDialog by remember { mutableStateOf(false) }
     var showBatchDialog by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+
+    val exportBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(encodeBackup(settings, entries, manualPrices, settlements).toByteArray(Charsets.UTF_8))
+                } ?: error("无法写入备份文件")
+            }.onSuccess {
+                backupMessage = "备份已导出。"
+            }.onFailure {
+                backupMessage = "备份导出失败：${it.message ?: "无法写入文件"}"
+            }
+        }
+    }
+    val importBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        pendingImportUri = uri
+    }
 
     LaunchedEffect(Unit) {
         entries.clear()
@@ -247,10 +269,17 @@ private fun ElectricityApp() {
                         showEntryDialog = true
                     },
                 )
-                Screen.Settings -> SettingsScreen(settings, entries) {
-                    settings = it
-                    saveSettings(context, it)
-                }
+                Screen.Settings -> SettingsScreen(
+                    settings = settings,
+                    entries = entries,
+                    backupMessage = backupMessage,
+                    onSave = {
+                        settings = it
+                        saveSettings(context, it)
+                    },
+                    onExportBackup = { exportBackupLauncher.launch("electricity-backup.electricity") },
+                    onImportBackup = { importBackupLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) },
+                )
             }
         }
     }
@@ -318,6 +347,45 @@ private fun ElectricityApp() {
                 saveSettlements(context, settlements)
                 settlingCycle = null
             },
+        )
+    }
+
+    pendingImportUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingImportUri = null },
+            title = { Text("导入备份") },
+            text = { Text("导入会覆盖当前的设置、每日记录、电价覆盖和退补记录。确认继续吗？") },
+            confirmButton = {
+                Button(onClick = {
+                    val result = runCatching {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { reader ->
+                            decodeBackup(reader.readText())
+                        } ?: error("无法读取备份文件")
+                    }
+                    val snapshot = result.getOrNull()
+                    if (snapshot == null) {
+                        backupMessage = "备份文件无效或版本不兼容。"
+                    } else if (snapshot.isLegacyCsv) {
+                        entries.clear()
+                        entries.addAll(snapshot.entries)
+                        saveEntries(context, entries)
+                        backupMessage = "旧版 CSV 已导入，每日记录已恢复，其他设置保持不变。"
+                    } else {
+                        settings = snapshot.settings
+                        entries.clear()
+                        entries.addAll(snapshot.entries)
+                        manualPrices = snapshot.manualPrices
+                        settlements = snapshot.settlements
+                        saveSettings(context, settings)
+                        saveEntries(context, entries)
+                        saveManualPrices(context, manualPrices)
+                        saveSettlements(context, settlements)
+                        backupMessage = "备份已恢复。"
+                    }
+                    pendingImportUri = null
+                }) { Text("确认导入") }
+            },
+            dismissButton = { OutlinedButton(onClick = { pendingImportUri = null }) { Text("取消") } },
         )
     }
 }
@@ -561,7 +629,14 @@ private fun RecordsScreen(
 }
 
 @Composable
-private fun SettingsScreen(settings: AppSettings, entries: List<UsageEntry>, onSave: (AppSettings) -> Unit) {
+private fun SettingsScreen(
+    settings: AppSettings,
+    entries: List<UsageEntry>,
+    backupMessage: String?,
+    onSave: (AppSettings) -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
+) {
     val clipboard = LocalClipboardManager.current
     var startDate by remember(settings) { mutableStateOf(settings.cycleStartDate.toString()) }
     var initialPrice by remember(settings) { mutableStateOf(fmt(settings.initialPrice)) }
@@ -617,6 +692,12 @@ private fun SettingsScreen(settings: AppSettings, entries: List<UsageEntry>, onS
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("复制 CSV") }
+                Text("系统会尝试自动备份应用数据；换手机或更换签名时，建议同时导出一份完整备份。", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onExportBackup, modifier = Modifier.weight(1f)) { Text("导出完整备份") }
+                    OutlinedButton(onClick = onImportBackup, modifier = Modifier.weight(1f)) { Text("导入完整备份") }
+                }
+                backupMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
             }
         }
         item { Spacer(Modifier.height(96.dp)) }

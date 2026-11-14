@@ -6,6 +6,8 @@
         android:label="电费记录"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/AppTheme">
         <activity
             android:name=".MainActivity"

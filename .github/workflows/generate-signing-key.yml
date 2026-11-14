@@ -1,0 +1,40 @@
+name: Generate stable signing key
+
+on:
+  workflow_dispatch:
+    inputs:
+      keystore_password:
+        description: "Password for the generated keystore"
+        required: true
+        type: string
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Generate keystore
+        env:
+          KEYSTORE_PASSWORD: ${{ inputs.keystore_password }}
+        run: |
+          keytool -genkeypair -v \
+            -keystore electricity-release.jks \
+            -storetype JKS \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEYSTORE_PASSWORD" \
+            -alias electricity \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Electricity Bill, OU=Personal, O=Personal, L=Unknown, ST=Unknown, C=CN"
+
+      - name: Upload keystore
+        uses: actions/upload-artifact@v4
+        with:
+          name: electricity-release-keystore
+          path: electricity-release.jks
