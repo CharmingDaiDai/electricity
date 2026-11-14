@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -38,13 +39,12 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -53,7 +53,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -84,6 +83,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -125,27 +125,27 @@ class MainActivity : ComponentActivity() {
 private fun ElectricityTheme(content: @Composable () -> Unit) {
     val colors = if (isSystemInDarkTheme()) {
         darkColorScheme(
-            primary = Color(0xFFF2F4F5),
-            onPrimary = Color(0xFF17191C),
-            primaryContainer = Color(0xFF30343A),
-            onPrimaryContainer = Color(0xFFF2F4F5),
-            secondary = Color(0xFFE0A27E),
-            secondaryContainer = Color(0xFF4B3025),
-            surface = Color(0xFF151719),
-            surfaceVariant = Color(0xFF26292D),
-            background = Color(0xFF0D0F10),
+            primary = Color(0xFFE9ECF0),
+            onPrimary = Color(0xFF121417),
+            primaryContainer = Color(0xFF272B30),
+            onPrimaryContainer = Color(0xFFE9ECF0),
+            secondary = Color(0xFF7DD3FC),
+            secondaryContainer = Color(0xFF123142),
+            surface = Color(0xFF15171A),
+            surfaceVariant = Color(0xFF24272C),
+            background = Color(0xFF0B0D0F),
         )
     } else {
         lightColorScheme(
-            primary = Color(0xFF202428),
+            primary = Color(0xFF171A1F),
             onPrimary = Color.White,
-            primaryContainer = Color(0xFFE4E7E9),
-            onPrimaryContainer = Color(0xFF202428),
-            secondary = Color(0xFFB85C36),
-            secondaryContainer = Color(0xFFF5E1D7),
+            primaryContainer = Color(0xFFE8EBEE),
+            onPrimaryContainer = Color(0xFF171A1F),
+            secondary = Color(0xFF0C78A0),
+            secondaryContainer = Color(0xFFD9F0F9),
             surface = Color(0xFFFFFFFF),
-            surfaceVariant = Color(0xFFF0F1F2),
-            background = Color(0xFFF6F6F4),
+            surfaceVariant = Color(0xFFF1F3F5),
+            background = Color(0xFFF5F6F8),
         )
     }
     MaterialTheme(colorScheme = colors, content = content)
@@ -206,29 +206,23 @@ private fun ElectricityApp() {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = {
                     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("ELECTRICITY / 账本", style = MaterialTheme.typography.labelSmall, letterSpacing = 0.8.sp, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
                         Text(
                             when (screen) {
                                 Screen.Home -> "概览"
                                 Screen.Records -> "记录"
                                 Screen.Settings -> "设置"
                             },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 24.sp,
                         )
-                        Text("电费记录", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 actions = {},
             )
         },
         bottomBar = {
-            NavigationBar {
-                Row(Modifier.fillMaxWidth()) {
-                    NavItem(Modifier.weight(1f), screen == Screen.Home, { screen = Screen.Home }, Icons.Default.Home, "概览")
-                    NavItem(Modifier.weight(1f), screen == Screen.Records, { screen = Screen.Records }, Icons.Default.List, "日历")
-                    NavItem(Modifier.weight(1f), screen == Screen.Settings, { screen = Screen.Settings }, Icons.Default.Settings, "设置")
-                }
-            }
+            BottomDock(screen = screen, onScreen = { screen = it })
         },
         floatingActionButton = {
             if (screen != Screen.Settings) {
@@ -236,6 +230,9 @@ private fun ElectricityApp() {
                     onClick = { showAddSheet = true },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     text = { Text("新增记录") },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shape = RoundedCornerShape(16.dp),
                 )
             }
         },
@@ -427,6 +424,25 @@ private fun ElectricityApp() {
 }
 
 @Composable
+private fun BottomDock(screen: Screen, onScreen: (Screen) -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 10.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+    ) {
+        Row(Modifier.padding(4.dp)) {
+            NavItem(Modifier.weight(1f), screen == Screen.Home, { onScreen(Screen.Home) }, Icons.Default.Home, "概览")
+            NavItem(Modifier.weight(1f), screen == Screen.Records, { onScreen(Screen.Records) }, Icons.Default.List, "记录")
+            NavItem(Modifier.weight(1f), screen == Screen.Settings, { onScreen(Screen.Settings) }, Icons.Default.Settings, "设置")
+        }
+    }
+}
+
+@Composable
 private fun NavItem(
     modifier: Modifier,
     selected: Boolean,
@@ -436,23 +452,23 @@ private fun NavItem(
 ) {
     Surface(
         modifier = modifier
-            .padding(horizontal = 6.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .padding(3.dp)
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 6.dp),
+            modifier = Modifier.padding(vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
                 icon,
                 contentDescription = label,
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
                 label,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
@@ -549,8 +565,8 @@ private fun HomeScreen(
     LazyColumn(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { Spacer(Modifier.height(2.dp)) }
         item {
@@ -584,7 +600,7 @@ private fun HomeScreen(
                 onSettle = onSettle,
             )
         }
-        item { Spacer(Modifier.height(96.dp)) }
+        item { Spacer(Modifier.height(116.dp)) }
     }
 }
 
@@ -632,13 +648,13 @@ private fun SettlementScopePicker(
 private fun ScopeChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        tonalElevation = if (selected) 0.dp else 1.dp,
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
     ) {
         Text(
             label,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
             color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
         )
@@ -655,35 +671,46 @@ private fun HeroCard(
     totalSettled: Double,
 ) {
     val remaining = money(totalDifference - totalSettled)
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        shape = RoundedCornerShape(30.dp),
+        color = MaterialTheme.colorScheme.primary,
+        shadowElevation = 10.dp,
     ) {
-        Box(
-            Modifier
-                .background(MaterialTheme.colorScheme.primary)
-                .padding(20.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(scopeLabel, color = Color.White.copy(alpha = 0.82f), fontWeight = FontWeight.Medium)
-                    Text(periodLabel, color = Color.White.copy(alpha = 0.88f))
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(scopeLabel, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text(periodLabel, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.bodySmall)
                 }
-                Text("${fmt(totalKwh)} 度", color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.Bold)
-                LinearProgressIndicator(
-                    progress = (totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.White,
-                    trackColor = Color.White.copy(alpha = 0.24f),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GlassMetric("执行电价", "${fmt(summary.expectedPrice)} 元/度", Modifier.weight(1f))
-                    GlassMetric("实际扣费", "${fmt(summary.actualPrice)} 元/度", Modifier.weight(1f))
+                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.1f)) {
+                    Text("电费账本", modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GlassMetric(if (totalDifference >= 0) "应退合计" else "应补合计", "${fmt(abs(totalDifference))} 元", Modifier.weight(1f))
-                    GlassMetric(if (remaining >= 0) "未处理" else "多处理", "${fmt(abs(remaining))} 元", Modifier.weight(1f))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("${fmt(totalKwh)}", color = MaterialTheme.colorScheme.onPrimary, fontSize = 54.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
+                Text("本段累计用电 · 度", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.bodyMedium)
+            }
+            LinearProgressIndicator(
+                progress = (totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
+                modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
+                color = MaterialTheme.colorScheme.secondary,
+                trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GlassMetric("执行", "${fmt(summary.expectedPrice)} / 度", Modifier.weight(1f))
+                GlassMetric("实扣", "${fmt(summary.actualPrice)} / 度", Modifier.weight(1f))
+            }
+            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.1f)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(if (totalDifference >= 0) "预计应退" else "预计应补", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall)
+                        Text("${fmt(abs(totalDifference))} 元", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(if (remaining >= 0) "尚未处理" else "已多处理", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall)
+                        Text("${fmt(abs(remaining))} 元", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
                 }
             }
         }
@@ -706,8 +733,8 @@ private fun RecordsScreen(
     LazyColumn(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { Spacer(Modifier.height(2.dp)) }
         item {
@@ -738,7 +765,7 @@ private fun RecordsScreen(
         items(visibleEntries(mode, anchor, entries).sortedByDescending { it.date.toEpochDay() }, key = { it.date.toString() }) {
             EntryRow(it, onEdit, onDelete)
         }
-        item { Spacer(Modifier.height(96.dp)) }
+        item { Spacer(Modifier.height(116.dp)) }
     }
 }
 
@@ -835,11 +862,12 @@ private fun SettingsScreen(
 @Composable
 private fun ModeSelector(mode: RecordMode, onMode: (RecordMode) -> Unit) {
     Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             ModeButton("日", mode == RecordMode.Day, Modifier.weight(1f)) { onMode(RecordMode.Day) }
             ModeButton("周", mode == RecordMode.Week, Modifier.weight(1f)) { onMode(RecordMode.Week) }
             ModeButton("月", mode == RecordMode.Month, Modifier.weight(1f)) { onMode(RecordMode.Month) }
@@ -852,14 +880,14 @@ private fun ModeSelector(mode: RecordMode, onMode: (RecordMode) -> Unit) {
 private fun ModeButton(text: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     Surface(
         modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
-        color = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+        shape = RoundedCornerShape(13.dp),
+        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
     ) {
         Text(
             text = text,
             modifier = Modifier.padding(vertical = 10.dp),
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
     }
@@ -868,9 +896,13 @@ private fun ModeButton(text: String, selected: Boolean, modifier: Modifier, onCl
 @Composable
 private fun CalendarHeader(title: String, onPrev: () -> Unit, onNext: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-        IconButton(onClick = onPrev) { Icon(Icons.Default.ChevronLeft, contentDescription = "上一个") }
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, contentDescription = "下一个") }
+        Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))) {
+            IconButton(onClick = onPrev) { Icon(Icons.Default.ChevronLeft, contentDescription = "上一个") }
+        }
+        Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, fontFamily = FontFamily.Monospace)
+        Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))) {
+            IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, contentDescription = "下一个") }
+        }
     }
 }
 
@@ -966,12 +998,12 @@ private fun DayTile(date: LocalDate, entry: UsageEntry?, modifier: Modifier, mut
     val filled = entry != null
     Surface(
         modifier = modifier
-            .height(68.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .height(64.dp)
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         color = when {
-            filled -> MaterialTheme.colorScheme.primaryContainer
+            filled -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (muted) 0.42f else 1f)
         },
     ) {
@@ -979,10 +1011,14 @@ private fun DayTile(date: LocalDate, entry: UsageEntry?, modifier: Modifier, mut
             Text(
                 date.dayOfMonth.toString(),
                 fontWeight = FontWeight.Bold,
-                color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f) else Color.Unspecified,
+                color = when {
+                    filled -> MaterialTheme.colorScheme.onPrimary
+                    muted -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                    else -> Color.Unspecified
+                },
             )
             if (entry != null) {
-                Text("${fmt(entry.kwh)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text("${fmt(entry.kwh)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimary)
             } else {
                 Box(
                     Modifier
@@ -1013,67 +1049,67 @@ private fun CycleCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val remaining = settled?.let { money(summary.difference - it) }
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { expanded = !expanded },
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("${summary.startDate} - ${summary.endDate}", fontWeight = FontWeight.Bold)
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("${summary.startDate.monthValue} 月 ${summary.startDate.dayOfMonth} 日 - ${summary.endDate.monthValue} 月 ${summary.endDate.dayOfMonth} 日", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Text(
                         buildString {
-                            append(if (summary.isComplete) "数据完整" else "缺 ${summary.missingDates.size} 天")
-                            if (isOverridden) append(" · 手动电价")
-                            if (settled != null) append(if (settled >= 0.0) " · 已登记退还" else " · 已登记补缴")
+                            append(if (summary.isComplete) "记录完整" else "缺 ${summary.missingDates.size} 天")
+                            if (isOverridden) append(" · 已改电价")
+                            if (settled != null) append(if (settled >= 0.0) " · 已退" else " · 已补")
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    if (summary.difference >= 0) "+${fmt(summary.difference)}" else "-${fmt(abs(summary.difference))}",
-                    color = amountColor(summary.difference),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(if (summary.difference >= 0) "应退" else "应补", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (summary.difference >= 0) "+${fmt(summary.difference)}" else "-${fmt(abs(summary.difference))}",
+                        color = amountColor(summary.difference),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 20.sp,
+                    )
+                }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SoftMetric("用电", "${fmt(summary.totalKwh)} 度", Modifier.weight(1f))
-                SoftMetric("应执行", "${fmt(summary.expectedPrice)}", Modifier.weight(1f))
-                SoftMetric("实扣", "${fmt(summary.actualPrice)}", Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth()) {
+                LedgerMetric("用电", "${fmt(summary.totalKwh)} 度", Modifier.weight(1.2f))
+                LedgerMetric("执行", "${fmt(summary.expectedPrice)}", Modifier.weight(1f))
+                LedgerMetric("实扣", "${fmt(summary.actualPrice)}", Modifier.weight(1f))
             }
             if (remaining != null) {
-                Text(
-                    "已处理 ${fmt(abs(settled))} 元，剩余 ${fmt(abs(remaining))} 元",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { onOverridePrice(summary) }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("电价")
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                    Text("已处理 ${fmt(abs(settled))} 元 · 剩余 ${fmt(abs(remaining))} 元", modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp), color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.bodySmall)
                 }
-                Button(onClick = { onSettle(summary) }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("结算")
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (expanded) "收起明细" else "查看明细", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Row {
+                    TextButton(onClick = { onOverridePrice(summary) }) { Text("调整电价") }
+                    TextButton(onClick = { onSettle(summary) }) { Text("登记结算") }
                 }
             }
             if (expanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    summary.entries.forEach {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(it.date.toString())
-                            Text("${fmt(it.kwh)} 度")
+                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        summary.entries.forEach {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(it.date.toString(), style = MaterialTheme.typography.bodySmall)
+                                Text("${fmt(it.kwh)} 度", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                            }
                         }
+                        if (summary.entries.isEmpty()) Text("本周期还没有记录。", style = MaterialTheme.typography.bodySmall)
                     }
-                    if (summary.entries.isEmpty()) Text("本周期还没有记录。")
                 }
             }
         }
@@ -1081,11 +1117,20 @@ private fun CycleCard(
 }
 
 @Composable
+private fun LedgerMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+    }
+}
+
+@Composable
 private fun EntryRow(entry: UsageEntry, onEdit: (UsageEntry) -> Unit, onDelete: (UsageEntry) -> Unit) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
         Row(
             Modifier
@@ -1094,11 +1139,17 @@ private fun EntryRow(entry: UsageEntry, onEdit: (UsageEntry) -> Unit, onDelete: 
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
-                Text(entry.date.toString(), fontWeight = FontWeight.Bold)
-                Text("${fmt(entry.kwh)} 度", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(shape = RoundedCornerShape(11.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                    Text("${entry.date.dayOfMonth}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+                Column {
+                    Text(entry.date.toString(), fontWeight = FontWeight.Bold)
+                    Text("每日用电记录", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
             }
-            Row {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${fmt(entry.kwh)} 度", fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
                 IconButton(onClick = { onEdit(entry) }) { Icon(Icons.Default.Edit, contentDescription = "编辑") }
                 IconButton(onClick = { onDelete(entry) }) { Icon(Icons.Default.Delete, contentDescription = "删除") }
             }
@@ -1113,27 +1164,37 @@ private fun ThresholdCard(totalKwh: Double) {
         totalKwh <= 120.0 -> 120.0
         else -> null
     }
-    ModernCard {
-        Text("阈值提醒", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        Text("60 度和 120 度会决定下一个 15 天周期电价。")
-        Text(
-            if (nextLimit == null) "当前周期已超过 120 度，下周期预计按最高档。"
-            else "距离 ${fmt(nextLimit)} 度还剩 ${fmt(nextLimit - totalKwh)} 度。",
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-        )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondary) {
+                Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.padding(8.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSecondary)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("下一周期电价提醒", fontWeight = FontWeight.Bold)
+                Text(
+                    if (nextLimit == null) "当前已超过 120 度，下周期预计按最高档。"
+                    else "距 ${fmt(nextLimit)} 度门槛还剩 ${fmt(nextLimit - totalKwh)} 度。",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun ModernCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
     }
 }
 
@@ -1141,12 +1202,12 @@ private fun ModernCard(content: @Composable ColumnScope.() -> Unit) {
 private fun GlassMetric(title: String, value: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.16f),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.08f),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, color = Color.White.copy(alpha = 0.78f), fontSize = 12.sp)
-            Text(value, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(title, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.62f), fontSize = 11.sp)
+            Text(value, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
         }
     }
 }
@@ -1155,19 +1216,20 @@ private fun GlassMetric(title: String, value: String, modifier: Modifier = Modif
 private fun SoftMetric(title: String, value: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Text(value, fontWeight = FontWeight.Bold)
+            Text(value, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
         }
     }
 }
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(top = 4.dp))
+    Text(text.uppercase(), fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, letterSpacing = 1.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
 }
 
 @Composable
