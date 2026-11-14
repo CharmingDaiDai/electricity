@@ -20,8 +20,11 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -39,6 +42,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -95,6 +99,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -258,25 +263,6 @@ private fun ElectricityApp() {
                 }
             }
         },
-        bottomBar = {
-            BottomDock(screen = screen, onScreen = { screen = it })
-        },
-        floatingActionButton = {
-            AnimatedVisibility(visible = screen != Screen.Settings, enter = fadeIn(tween(150)), exit = fadeOut(tween(100))) {
-                Surface(
-                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).pressScale { showAddSheet = true },
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shadowElevation = 8.dp,
-                ) {
-                    Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Text("新增记录", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        },
     ) { padding ->
         Box(
             Modifier
@@ -285,6 +271,7 @@ private fun ElectricityApp() {
                 .padding(padding),
         ) {
             AnimatedContent(
+                modifier = Modifier.fillMaxSize(),
                 targetState = screen,
                 transitionSpec = {
                     val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
@@ -339,6 +326,30 @@ private fun ElectricityApp() {
                     onImportBackup = { importBackupLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) },
                 )
               }
+            }
+            BottomDock(
+                screen = screen,
+                onScreen = { screen = it },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+            AnimatedVisibility(
+                visible = screen != Screen.Settings,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 20.dp, bottom = 116.dp),
+                enter = fadeIn(tween(150)) + slideInVertically(tween(180)) { it / 3 },
+                exit = fadeOut(tween(100)) + slideOutVertically(tween(100)) { it / 3 },
+            ) {
+                Surface(
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).pressScale { showAddSheet = true },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shadowElevation = 8.dp,
+                ) {
+                    Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Text("新增记录", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }
@@ -490,21 +501,48 @@ private fun ElectricityApp() {
 }
 
 @Composable
-private fun BottomDock(screen: Screen, onScreen: (Screen) -> Unit) {
+private fun BottomDock(screen: Screen, onScreen: (Screen) -> Unit, modifier: Modifier = Modifier) {
+    val dark = isSystemInDarkTheme()
+    val rim = Brush.linearGradient(
+        listOf(Color.White.copy(alpha = if (dark) 0.48f else 0.82f), Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = if (dark) 0.28f else 0.54f)),
+    )
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 10.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        shape = RoundedCornerShape(25.dp),
+        color = if (dark) Color(0xFF242A30).copy(alpha = 0.82f) else Color(0xFFFDFEFF).copy(alpha = 0.78f),
+        shadowElevation = 16.dp,
+        border = BorderStroke(1.dp, rim),
     ) {
-        Row(Modifier.padding(4.dp)) {
-            NavItem(Modifier.weight(1f), screen == Screen.Home, { onScreen(Screen.Home) }, Icons.Default.Home, "概览")
-            NavItem(Modifier.weight(1f), screen == Screen.Records, { onScreen(Screen.Records) }, Icons.Default.DateRange, "日历")
-            NavItem(Modifier.weight(1f), screen == Screen.Settings, { onScreen(Screen.Settings) }, Icons.Default.Settings, "设置")
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(4.dp)) {
+            val itemWidth = maxWidth / 3
+            val indicatorOffset by animateDpAsState(
+                targetValue = itemWidth * screen.ordinal.toFloat(),
+                animationSpec = spring(dampingRatio = 0.78f, stiffness = 480f),
+                label = "glass-navigation-indicator",
+            )
+            Box(
+                Modifier
+                    .offset(x = indicatorOffset + 3.dp, y = 3.dp)
+                    .width(itemWidth - 6.dp)
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = if (dark) 0.18f else 0.72f),
+                                Color.White.copy(alpha = if (dark) 0.08f else 0.34f),
+                            ),
+                        ),
+                    ),
+            )
+            Row(Modifier.fillMaxWidth()) {
+                NavItem(Modifier.weight(1f), screen == Screen.Home, { onScreen(Screen.Home) }, Icons.Default.Home, "概览")
+                NavItem(Modifier.weight(1f), screen == Screen.Records, { onScreen(Screen.Records) }, Icons.Default.DateRange, "日历")
+                NavItem(Modifier.weight(1f), screen == Screen.Settings, { onScreen(Screen.Settings) }, Icons.Default.Settings, "设置")
+            }
         }
     }
 }
@@ -530,24 +568,30 @@ private fun ActionChoice(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
 ) {
+    val selectedTint = if (isSystemInDarkTheme()) Color.White else MaterialTheme.colorScheme.primary
     Surface(
         modifier = Modifier.fillMaxWidth().pressScale(onClick),
         shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF171A1F),
+        color = if (isSystemInDarkTheme()) Color(0xFF292F35).copy(alpha = 0.82f) else Color.White.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = 0.62f), Color.White.copy(alpha = 0.12f)))),
+        shadowElevation = 3.dp,
     ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Surface(shape = RoundedCornerShape(12.dp), color = Color.White.copy(alpha = 0.1f)) {
-                Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(20.dp), tint = MaterialTheme.colorScheme.secondary)
+        Box {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.36f), Color.Transparent))))
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.76f)) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(20.dp), tint = MaterialTheme.colorScheme.secondary)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = selectedTint.copy(alpha = 0.65f))
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, fontWeight = FontWeight.Bold, color = Color.White)
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.64f))
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White.copy(alpha = 0.62f))
         }
     }
 }
@@ -560,33 +604,26 @@ private fun NavItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
 ) {
-    val containerColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-        animationSpec = tween(180),
-        label = "navigation-selection",
-    )
-    Surface(
+    Column(
         modifier = modifier
-            .padding(3.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .pressScale(onClick),
-        color = containerColor,
+            .height(62.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .pressScale(onClick)
+            .padding(vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Column(
-            modifier = Modifier.padding(vertical = 7.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                label,
-                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
+        val tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = tint,
+        )
+        Text(
+            label,
+            color = tint,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
