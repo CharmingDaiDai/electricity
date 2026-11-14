@@ -9,12 +9,27 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -22,10 +37,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,31 +55,29 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DatePicker
@@ -78,7 +95,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -134,6 +153,8 @@ private fun ElectricityTheme(content: @Composable () -> Unit) {
             surface = Color(0xFF15171A),
             surfaceVariant = Color(0xFF24272C),
             background = Color(0xFF0B0D0F),
+            outline = Color(0xFF555B63),
+            outlineVariant = Color(0xFF373C43),
         )
     } else {
         lightColorScheme(
@@ -146,9 +167,21 @@ private fun ElectricityTheme(content: @Composable () -> Unit) {
             surface = Color(0xFFFFFFFF),
             surfaceVariant = Color(0xFFF1F3F5),
             background = Color(0xFFF5F6F8),
+            outline = Color(0xFF727981),
+            outlineVariant = Color(0xFFDCE0E4),
         )
     }
-    MaterialTheme(colorScheme = colors, content = content)
+    MaterialTheme(
+        colorScheme = colors,
+        shapes = Shapes(
+            extraSmall = RoundedCornerShape(8.dp),
+            small = RoundedCornerShape(12.dp),
+            medium = RoundedCornerShape(16.dp),
+            large = RoundedCornerShape(22.dp),
+            extraLarge = RoundedCornerShape(28.dp),
+        ),
+        content = content,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -202,38 +235,49 @@ private fun ElectricityApp() {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                title = {
-                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        Text("ELECTRICITY / 账本", style = MaterialTheme.typography.labelSmall, letterSpacing = 0.8.sp, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
-                        Text(
-                            when (screen) {
-                                Screen.Home -> "概览"
-                                Screen.Records -> "记录"
-                                Screen.Settings -> "设置"
-                            },
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 24.sp,
-                        )
-                    }
-                },
-                actions = {},
-            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .statusBarsPadding()
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text("电费账本", style = MaterialTheme.typography.labelSmall, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                AnimatedContent(
+                    targetState = screen,
+                    transitionSpec = { fadeIn(tween(130)) togetherWith fadeOut(tween(90)) },
+                    label = "page-heading",
+                ) { page ->
+                    Text(
+                        when (page) {
+                            Screen.Home -> "概览"
+                            Screen.Records -> "用电日历"
+                            Screen.Settings -> "计费与数据"
+                        },
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 26.sp,
+                    )
+                }
+            }
         },
         bottomBar = {
             BottomDock(screen = screen, onScreen = { screen = it })
         },
         floatingActionButton = {
-            if (screen != Screen.Settings) {
-                ExtendedFloatingActionButton(
-                    onClick = { showAddSheet = true },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("新增记录") },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+            AnimatedVisibility(visible = screen != Screen.Settings, enter = fadeIn(tween(150)), exit = fadeOut(tween(100))) {
+                Surface(
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).pressScale { showAddSheet = true },
                     shape = RoundedCornerShape(16.dp),
-                )
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    shadowElevation = 8.dp,
+                ) {
+                    Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Text("新增记录", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         },
     ) { padding ->
@@ -243,7 +287,16 @@ private fun ElectricityApp() {
                 .background(MaterialTheme.colorScheme.background)
                 .padding(padding),
         ) {
-            when (screen) {
+            AnimatedContent(
+                targetState = screen,
+                transitionSpec = {
+                    val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                    (fadeIn(tween(180)) + slideInHorizontally(tween(220)) { direction * it / 30 }) togetherWith
+                        (fadeOut(tween(100)) + slideOutHorizontally(tween(150)) { -direction * it / 36 })
+                },
+                label = "main-screen",
+            ) { targetScreen ->
+              when (targetScreen) {
                 Screen.Home -> HomeScreen(
                     current = current,
                     summaries = summaries,
@@ -256,6 +309,7 @@ private fun ElectricityApp() {
                     onOverviewMode = { overviewMode = it },
                     onOverridePrice = { overridingCycle = it },
                     onSettle = { settlingCycle = it },
+                    onQuickAdd = { showAddSheet = true },
                 )
                 Screen.Records -> RecordsScreen(
                     entries = entries,
@@ -287,6 +341,7 @@ private fun ElectricityApp() {
                     onExportBackup = { exportBackupLauncher.launch("electricity-backup.electricity") },
                     onImportBackup = { importBackupLauncher.launch(arrayOf("application/octet-stream", "text/plain", "*/*")) },
                 )
+              }
             }
         }
     }
@@ -308,27 +363,30 @@ private fun ElectricityApp() {
 
     if (showAddSheet) {
         ModalBottomSheet(onDismissRequest = { showAddSheet = false }) {
-            Text("新增记录", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-            ListItem(
-                headlineContent = { Text("单日录入") },
-                supportingContent = { Text("为某一天添加或修改用电量") },
-                leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
-                modifier = Modifier.clickable {
+            Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("新增用电记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                Text("选择录入方式 · 单日或批量", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ActionChoice(
+                    title = "单日录入",
+                    detail = "${selectedDate} · ${if (entries.any { it.date == selectedDate }) "编辑已有记录" else "填写当天用电量"}",
+                    icon = Icons.Default.Add,
+                    onClick = {
                     showAddSheet = false
                     editingEntry = entries.firstOrNull { it.date == selectedDate }
                     showEntryDialog = true
-                },
-            )
-            ListItem(
-                headlineContent = { Text("批量录入") },
-                supportingContent = { Text("粘贴多行日期和用电量") },
-                leadingContent = { Icon(Icons.Default.Upload, contentDescription = null) },
-                modifier = Modifier.clickable {
+                    },
+                )
+                ActionChoice(
+                    title = "批量录入",
+                    detail = "粘贴多行日期和用电量",
+                    icon = Icons.Default.Upload,
+                    onClick = {
                     showAddSheet = false
                     showBatchDialog = true
-                },
-            )
-            Spacer(Modifier.height(24.dp))
+                    },
+                )
+                Spacer(Modifier.height(16.dp))
+            }
         }
     }
 
@@ -428,6 +486,7 @@ private fun BottomDock(screen: Screen, onScreen: (Screen) -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp),
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -436,8 +495,51 @@ private fun BottomDock(screen: Screen, onScreen: (Screen) -> Unit) {
     ) {
         Row(Modifier.padding(4.dp)) {
             NavItem(Modifier.weight(1f), screen == Screen.Home, { onScreen(Screen.Home) }, Icons.Default.Home, "概览")
-            NavItem(Modifier.weight(1f), screen == Screen.Records, { onScreen(Screen.Records) }, Icons.Default.List, "记录")
+            NavItem(Modifier.weight(1f), screen == Screen.Records, { onScreen(Screen.Records) }, Icons.Default.DateRange, "日历")
             NavItem(Modifier.weight(1f), screen == Screen.Settings, { onScreen(Screen.Settings) }, Icons.Default.Settings, "设置")
+        }
+    }
+}
+
+private fun Modifier.pressScale(onClick: () -> Unit): Modifier = composed {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.975f else 1f,
+        animationSpec = tween(110),
+        label = "press-scale",
+    )
+    graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }.clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+}
+
+@Composable
+private fun ActionChoice(
+    title: String,
+    detail: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().pressScale(onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary) {
+                Icon(icon, contentDescription = null, modifier = Modifier.padding(10.dp).size(20.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, fontWeight = FontWeight.Bold)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -450,12 +552,17 @@ private fun NavItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
 ) {
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = tween(180),
+        label = "navigation-selection",
+    )
     Surface(
         modifier = modifier
             .padding(3.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+            .pressScale(onClick),
+        color = containerColor,
     ) {
         Column(
             modifier = Modifier.padding(vertical = 7.dp),
@@ -551,6 +658,7 @@ private fun HomeScreen(
     onOverviewMode: (OverviewMode) -> Unit,
     onOverridePrice: (CycleSummary) -> Unit,
     onSettle: (CycleSummary) -> Unit,
+    onQuickAdd: () -> Unit,
 ) {
     val window = buildOverviewWindow(
         mode = overviewMode,
@@ -589,6 +697,9 @@ private fun HomeScreen(
                 totalSettled = window.settled,
             )
         }
+        if (summaries.none { it.entries.isNotEmpty() }) {
+            item { GettingStartedBanner(onQuickAdd) }
+        }
         item { ThresholdCard(current.totalKwh) }
         item { SectionTitle("周期账单") }
         items(summaries.reversed(), key = { it.index }) { summary ->
@@ -601,6 +712,30 @@ private fun HomeScreen(
             )
         }
         item { Spacer(Modifier.height(116.dp)) }
+    }
+}
+
+@Composable
+private fun GettingStartedBanner(onQuickAdd: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("从第一条用电记录开始", fontWeight = FontWeight.Bold)
+                Text("录入每日用电量后，这里会自动计算周期电价和退补金额。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onQuickAdd) {
+                Icon(Icons.Default.Add, contentDescription = "新增第一条记录", tint = MaterialTheme.colorScheme.secondary)
+            }
+        }
     }
 }
 
@@ -646,10 +781,15 @@ private fun SettlementScopePicker(
 
 @Composable
 private fun ScopeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val chipColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        animationSpec = tween(160),
+        label = "scope-chip",
+    )
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.pressScale(onClick),
         shape = RoundedCornerShape(10.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+        color = chipColor,
         border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.62f)),
     ) {
         Text(
@@ -671,44 +811,67 @@ private fun HeroCard(
     totalSettled: Double,
 ) {
     val remaining = money(totalDifference - totalSettled)
+    val displayedKwh by animateFloatAsState(
+        targetValue = totalKwh.toFloat(),
+        animationSpec = tween(420),
+        label = "overview-usage",
+    )
+    val progress by animateFloatAsState(
+        targetValue = (totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
+        animationSpec = tween(420),
+        label = "usage-threshold-progress",
+    )
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
-        color = MaterialTheme.colorScheme.primary,
+        color = Color(0xFF171A1F),
         shadowElevation = 10.dp,
     ) {
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(Modifier.weight(1f).padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(scopeLabel, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Text(periodLabel, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.bodySmall)
+                    Text(periodLabel, color = Color.White.copy(alpha = 0.66f), style = MaterialTheme.typography.bodySmall)
                 }
-                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.1f)) {
-                    Text("电费账本", modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+                Surface(shape = RoundedCornerShape(10.dp), color = Color.White.copy(alpha = 0.1f)) {
+                    Text("电费账本", modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("${fmt(totalKwh)}", color = MaterialTheme.colorScheme.onPrimary, fontSize = 54.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
-                Text("本段累计用电 · 度", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.bodyMedium)
+                BoxWithConstraints {
+                    Text(
+                        "${fmt(displayedKwh.toDouble())}",
+                        color = Color.White,
+                        fontSize = when {
+                            maxWidth < 260.dp -> 42.sp
+                            maxWidth < 320.dp -> 48.sp
+                            else -> 54.sp
+                        },
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                    )
+                }
+                Text("本段累计用电 · 度", color = Color.White.copy(alpha = 0.66f), style = MaterialTheme.typography.bodyMedium)
             }
             LinearProgressIndicator(
-                progress = (totalKwh / 120.0).coerceIn(0.0, 1.0).toFloat(),
+                progress = progress,
                 modifier = Modifier.fillMaxWidth().height(5.dp).clip(CircleShape),
                 color = MaterialTheme.colorScheme.secondary,
-                trackColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+                trackColor = Color.White.copy(alpha = 0.16f),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GlassMetric("执行", "${fmt(summary.expectedPrice)} / 度", Modifier.weight(1f))
                 GlassMetric("实扣", "${fmt(summary.actualPrice)} / 度", Modifier.weight(1f))
             }
-            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.1f)) {
+            Surface(shape = RoundedCornerShape(16.dp), color = Color.White.copy(alpha = 0.1f)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column {
-                        Text(if (totalDifference >= 0) "预计应退" else "预计应补", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall)
-                        Text("${fmt(abs(totalDifference))} 元", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Text(if (totalDifference >= 0) "预计应退" else "预计应补", color = Color.White.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall)
+                        Text("${fmt(abs(totalDifference))} 元", color = Color.White, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(if (remaining >= 0) "尚未处理" else "已多处理", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall)
+                        Text(if (remaining >= 0) "尚未处理" else "已多处理", color = Color.White.copy(alpha = 0.66f), style = MaterialTheme.typography.labelSmall)
                         Text("${fmt(abs(remaining))} 元", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                     }
                 }
@@ -729,6 +892,7 @@ private fun RecordsScreen(
     var mode by remember { mutableStateOf(RecordMode.Month) }
     var anchor by remember(selectedDate) { mutableStateOf(selectedDate) }
     val byDate = entries.associateBy { it.date }
+    val visible = visibleEntries(mode, anchor, entries).sortedByDescending { it.date.toEpochDay() }
 
     LazyColumn(
         Modifier
@@ -743,26 +907,50 @@ private fun RecordsScreen(
         item {
             CalendarHeader(
                 title = calendarTitle(mode, anchor),
-                onPrev = { anchor = moveAnchor(anchor, mode, -1) },
-                onNext = { anchor = moveAnchor(anchor, mode, 1) },
+                onPrev = {
+                    val previous = moveAnchor(anchor, mode, -1)
+                    anchor = previous
+                    onSelectedDate(previous)
+                },
+                onNext = {
+                    val next = moveAnchor(anchor, mode, 1)
+                    anchor = next
+                    onSelectedDate(next)
+                },
             )
         }
         item {
-            when (mode) {
-                RecordMode.Day -> DayPanel(anchor, byDate[anchor], onAddForDate, onEdit, onDelete)
-                RecordMode.Week -> WeekPanel(anchor, byDate, onSelectedDate, onAddForDate)
-                RecordMode.Month -> MonthPanel(anchor, byDate, onSelectedDate, onAddForDate)
-                RecordMode.Year -> YearPanel(anchor, entries) { month ->
-                    anchor = month.atDay(1)
-                    mode = RecordMode.Month
+            AnimatedContent(
+                targetState = Triple(mode, anchor, selectedDate),
+                transitionSpec = {
+                    val direction = if (targetState.second.isAfter(initialState.second)) 1 else -1
+                    (fadeIn(tween(180)) + slideInHorizontally(tween(200)) { direction * it / 36 }) togetherWith
+                        (fadeOut(tween(100)) + slideOutHorizontally(tween(140)) { -direction * it / 42 })
+                },
+                label = "calendar-period",
+            ) { (displayMode, displayAnchor, displaySelection) ->
+                when (displayMode) {
+                    RecordMode.Day -> DayPanel(displayAnchor, byDate[displayAnchor], onAddForDate, onEdit)
+                    RecordMode.Week -> WeekPanel(displayAnchor, byDate, displaySelection, onSelectedDate)
+                    RecordMode.Month -> MonthPanel(displayAnchor, byDate, displaySelection, onSelectedDate)
+                    RecordMode.Year -> YearPanel(displayAnchor, entries) { month ->
+                        anchor = month.atDay(1)
+                        onSelectedDate(month.atDay(1))
+                        mode = RecordMode.Month
+                    }
                 }
             }
         }
+        if (mode == RecordMode.Week || mode == RecordMode.Month) {
+            item { SelectedDatePanel(selectedDate, byDate[selectedDate], onAddForDate) }
+        }
         item {
-            val visible = visibleEntries(mode, anchor, entries)
             RecordsSummary(visible)
         }
-        items(visibleEntries(mode, anchor, entries).sortedByDescending { it.date.toEpochDay() }, key = { it.date.toString() }) {
+        if (visible.isEmpty() && mode == RecordMode.Year) {
+            item { EmptyRecordsState(selectedDate, onAddForDate) }
+        }
+        items(visible, key = { it.date.toString() }) {
             EntryRow(it, onEdit, onDelete)
         }
         item { Spacer(Modifier.height(116.dp)) }
@@ -785,12 +973,13 @@ private fun SettingsScreen(
     var rentDay by remember(settings) { mutableStateOf(settings.rentDay) }
     var showStartDatePicker by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("设置会立即影响所有周期计算。") }
+    var dataMessage by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { Spacer(Modifier.height(2.dp)) }
         item {
@@ -806,15 +995,26 @@ private fun SettingsScreen(
                         val date = runCatching { LocalDate.parse(startDate) }.getOrNull()
                         val initial = initialPrice.toDoubleOrNull()
                         val actual = actualPrice.toDoubleOrNull()
-                        if (date == null || initial == null || actual == null) {
-                            message = "请检查日期和价格格式。"
+                        if (date == null || initial == null || actual == null || initial < 0.0 || actual < 0.0) {
+                            message = "日期和单价须为有效的非负数值。"
                         } else {
                             onSave(AppSettings(date, twoDecimals(initial), twoDecimals(actual), rentDay))
                             message = "已保存。"
                         }
                     },
-                ) { Text("保存设置") }
-                Text(message, style = MaterialTheme.typography.bodySmall)
+                    shape = RoundedCornerShape(14.dp),
+                ) { Text("保存计费设置") }
+                AnimatedContent(targetState = message, label = "settings-feedback") { status ->
+                    Text(
+                        status,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            status == "已保存。" -> MaterialTheme.colorScheme.secondary
+                            status.contains("须为") -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
         }
         item {
@@ -832,10 +1032,11 @@ private fun SettingsScreen(
                 OutlinedButton(
                     onClick = {
                         clipboard.setText(AnnotatedString(entriesToCsv(entries)))
-                        message = "CSV 已复制。"
+                        dataMessage = "CSV 已复制到剪贴板。"
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("复制 CSV") }
+                dataMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary) }
                 Text("系统会尝试自动备份应用数据；换手机或更换签名时，建议同时导出一份完整备份。", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = onExportBackup, modifier = Modifier.weight(1f)) { Text("导出完整备份") }
@@ -844,7 +1045,7 @@ private fun SettingsScreen(
                 backupMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
             }
         }
-        item { Spacer(Modifier.height(96.dp)) }
+        item { Spacer(Modifier.height(116.dp)) }
     }
 
     if (showStartDatePicker) {
@@ -878,10 +1079,15 @@ private fun ModeSelector(mode: RecordMode, onMode: (RecordMode) -> Unit) {
 
 @Composable
 private fun ModeButton(text: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val backgroundColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = tween(160),
+        label = "record-range-tab",
+    )
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.pressScale(onClick),
         shape = RoundedCornerShape(13.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        color = backgroundColor,
     ) {
         Text(
             text = text,
@@ -899,7 +1105,15 @@ private fun CalendarHeader(title: String, onPrev: () -> Unit, onNext: () -> Unit
         Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))) {
             IconButton(onClick = onPrev) { Icon(Icons.Default.ChevronLeft, contentDescription = "上一个") }
         }
-        Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, fontFamily = FontFamily.Monospace)
+        AnimatedContent(
+            targetState = title,
+            transitionSpec = {
+                (fadeIn(tween(140)) + slideInVertically(tween(160)) { it / 8 }) togetherWith fadeOut(tween(90))
+            },
+            label = "calendar-title",
+        ) { period ->
+            Text(period, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, fontFamily = FontFamily.Monospace)
+        }
         Surface(shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))) {
             IconButton(onClick = onNext) { Icon(Icons.Default.ChevronRight, contentDescription = "下一个") }
         }
@@ -907,7 +1121,7 @@ private fun CalendarHeader(title: String, onPrev: () -> Unit, onNext: () -> Unit
 }
 
 @Composable
-private fun DayPanel(date: LocalDate, entry: UsageEntry?, onAdd: (LocalDate) -> Unit, onEdit: (UsageEntry) -> Unit, onDelete: (UsageEntry) -> Unit) {
+private fun DayPanel(date: LocalDate, entry: UsageEntry?, onAdd: (LocalDate) -> Unit, onEdit: (UsageEntry) -> Unit) {
     ModernCard {
         Text(date.toString(), fontWeight = FontWeight.Bold, fontSize = 24.sp)
         if (entry == null) {
@@ -915,24 +1129,66 @@ private fun DayPanel(date: LocalDate, entry: UsageEntry?, onAdd: (LocalDate) -> 
             Button(onClick = { onAdd(date) }, modifier = Modifier.fillMaxWidth()) { Text("录入这一天") }
         } else {
             Text("${fmt(entry.kwh)} 度", fontWeight = FontWeight.Bold, fontSize = 34.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = { onEdit(entry) }, modifier = Modifier.weight(1f)) { Text("编辑") }
-                OutlinedButton(onClick = { onDelete(entry) }, modifier = Modifier.weight(1f)) { Text("删除") }
+            Button(onClick = { onEdit(entry) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text("编辑当天记录") }
+        }
+    }
+}
+
+@Composable
+private fun SelectedDatePanel(date: LocalDate, entry: UsageEntry?, onAdd: (LocalDate) -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+    ) {
+        Row(
+            Modifier.padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("${date.monthValue}月${date.dayOfMonth}日 · ${weekdayLabel(date)}", fontWeight = FontWeight.Bold)
+                Text(
+                    entry?.let { "已记录 ${fmt(it.kwh)} 度" } ?: "尚无记录",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Button(onClick = { onAdd(date) }, shape = RoundedCornerShape(12.dp)) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (entry == null) "录入" else "编辑")
             }
         }
     }
 }
 
 @Composable
-private fun WeekPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, onSelectedDate: (LocalDate) -> Unit, onAdd: (LocalDate) -> Unit) {
+private fun EmptyRecordsState(date: LocalDate, onAdd: (LocalDate) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("这段时间还没有记录", fontWeight = FontWeight.Bold)
+        Text("从选中的日期开始补上用电量", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { onAdd(date) }) { Text("录入 ${date.monthValue}月${date.dayOfMonth}日") }
+    }
+}
+
+private fun weekdayLabel(date: LocalDate): String =
+    listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")[date.dayOfWeek.value - 1]
+
+@Composable
+private fun WeekPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, selectedDate: LocalDate, onSelectedDate: (LocalDate) -> Unit) {
     val start = anchor.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     ModernCard {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             (0..6).forEach { offset ->
                 val date = start.plusDays(offset.toLong())
-                DayTile(date, byDate[date], Modifier.weight(1f)) {
+                DayTile(date, byDate[date], Modifier.weight(1f), selected = date == selectedDate) {
                     onSelectedDate(date)
-                    onAdd(date)
                 }
             }
         }
@@ -940,7 +1196,7 @@ private fun WeekPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, onS
 }
 
 @Composable
-private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, onSelectedDate: (LocalDate) -> Unit, onAdd: (LocalDate) -> Unit) {
+private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, selectedDate: LocalDate, onSelectedDate: (LocalDate) -> Unit) {
     val month = YearMonth.from(anchor)
     val first = month.atDay(1)
     val gridStart = first.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -955,9 +1211,8 @@ private fun MonthPanel(anchor: LocalDate, byDate: Map<LocalDate, UsageEntry>, on
                 (0..6).forEach { day ->
                     val date = gridStart.plusDays((week * 7 + day).toLong())
                     val inMonth = YearMonth.from(date) == month
-                    DayTile(date, byDate[date], Modifier.weight(1f), muted = !inMonth) {
+                    DayTile(date, byDate[date], Modifier.weight(1f), muted = !inMonth, selected = date == selectedDate) {
                         onSelectedDate(date)
-                        onAdd(date)
                     }
                 }
             }
@@ -978,7 +1233,7 @@ private fun YearPanel(anchor: LocalDate, entries: List<UsageEntry>, onMonth: (Ye
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onMonth(month) },
+                            .pressScale { onMonth(month) },
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant,
                     ) {
@@ -994,31 +1249,38 @@ private fun YearPanel(anchor: LocalDate, entries: List<UsageEntry>, onMonth: (Ye
 }
 
 @Composable
-private fun DayTile(date: LocalDate, entry: UsageEntry?, modifier: Modifier, muted: Boolean = false, onClick: () -> Unit) {
+private fun DayTile(date: LocalDate, entry: UsageEntry?, modifier: Modifier, muted: Boolean = false, selected: Boolean = false, onClick: () -> Unit) {
     val filled = entry != null
-    Surface(
-        modifier = modifier
-            .height(64.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = when {
-            filled -> MaterialTheme.colorScheme.primary
+    val tileColor by animateColorAsState(
+        targetValue = when {
+            selected -> MaterialTheme.colorScheme.primary
+            filled -> MaterialTheme.colorScheme.secondaryContainer
             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (muted) 0.42f else 1f)
         },
+        animationSpec = tween(160),
+        label = "calendar-day-selection",
+    )
+    Surface(
+        modifier = modifier
+            .height(60.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .pressScale(onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = tileColor,
     ) {
         Column(Modifier.padding(7.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(
                 date.dayOfMonth.toString(),
                 fontWeight = FontWeight.Bold,
                 color = when {
-                    filled -> MaterialTheme.colorScheme.onPrimary
+                    selected -> MaterialTheme.colorScheme.onPrimary
+                    filled -> MaterialTheme.colorScheme.onSecondaryContainer
                     muted -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                     else -> Color.Unspecified
                 },
             )
             if (entry != null) {
-                Text("${fmt(entry.kwh)}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimary)
+                Text("${fmt(entry.kwh)}", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer)
             } else {
                 Box(
                     Modifier
@@ -1052,14 +1314,15 @@ private fun CycleCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded },
+            .animateContentSize(tween(220))
+            .pressScale { expanded = !expanded },
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f)),
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("${summary.startDate.monthValue} 月 ${summary.startDate.dayOfMonth} 日 - ${summary.endDate.monthValue} 月 ${summary.endDate.dayOfMonth} 日", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Text(
                         buildString {
@@ -1099,7 +1362,11 @@ private fun CycleCard(
                     TextButton(onClick = { onSettle(summary) }) { Text("登记结算") }
                 }
             }
-            if (expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(tween(150)) + expandVertically(tween(210)),
+                exit = fadeOut(tween(90)) + shrinkVertically(tween(140)),
+            ) {
                 Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         summary.entries.forEach {
@@ -1126,6 +1393,8 @@ private fun LedgerMetric(label: String, value: String, modifier: Modifier = Modi
 
 @Composable
 private fun EntryRow(entry: UsageEntry, onEdit: (UsageEntry) -> Unit, onDelete: (UsageEntry) -> Unit) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -1139,21 +1408,40 @@ private fun EntryRow(entry: UsageEntry, onEdit: (UsageEntry) -> Unit, onDelete: 
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(shape = RoundedCornerShape(11.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                    Text("${entry.date.dayOfMonth}", modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("${entry.date.monthValue}月${entry.date.dayOfMonth}日 · ${weekdayLabel(entry.date)}", fontWeight = FontWeight.Bold)
+                    Text("每日用电", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
-                Column {
-                    Text(entry.date.toString(), fontWeight = FontWeight.Bold)
-                    Text("每日用电记录", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("${fmt(entry.kwh)} 度", fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
-                IconButton(onClick = { onEdit(entry) }) { Icon(Icons.Default.Edit, contentDescription = "编辑") }
-                IconButton(onClick = { onDelete(entry) }) { Icon(Icons.Default.Delete, contentDescription = "删除") }
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = "记录操作") }
+                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                        DropdownMenuItem(
+                            text = { Text("编辑") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { menuExpanded = false; onEdit(entry) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = { menuExpanded = false; confirmDelete = true },
+                        )
+                    }
+                }
             }
         }
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("删除这条记录？") },
+            text = { Text("${entry.date} 的 ${fmt(entry.kwh)} 度用电记录将被删除。") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete(entry) }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
+        )
     }
 }
 
@@ -1203,11 +1491,11 @@ private fun GlassMetric(title: String, value: String, modifier: Modifier = Modif
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.08f),
+        color = Color.White.copy(alpha = 0.08f),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.62f), fontSize = 11.sp)
-            Text(value, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+            Text(title, color = Color.White.copy(alpha = 0.62f), fontSize = 11.sp)
+            Text(value, color = Color.White, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
         }
     }
 }
@@ -1246,6 +1534,7 @@ private fun SettingField(
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
     )
 }
 
@@ -1335,6 +1624,7 @@ private fun EntryDialog(date: LocalDate, entry: UsageEntry?, onDismiss: () -> Un
                     label = { Text("用电量（度）") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -1379,6 +1669,7 @@ private fun BatchDialog(onDismiss: () -> Unit, onImport: (BatchParseResult) -> U
                     onValueChange = { text = it },
                     label = { Text("每行：2026-08-01 12.34") },
                     minLines = 6,
+                    shape = RoundedCornerShape(14.dp),
                 )
                 message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -1419,6 +1710,7 @@ private fun PriceOverrideDialog(
                     label = { Text("应执行电价") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
@@ -1460,6 +1752,7 @@ private fun SettlementDialog(
                     label = { Text("实际退补金额") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                 )
                 Text("正数表示已退，负数表示已补。", style = MaterialTheme.typography.bodySmall)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
